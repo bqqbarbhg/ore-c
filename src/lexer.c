@@ -57,7 +57,7 @@ Lexer *createLexer(const LexerInput *input)
 	addKeyword(l, KW_Def, "def");
 	addKeyword(l, KW_Struct, "struct");
 
-	TokenType kw = symbolMapFind(&l->keywordMap, internZ("struct"));
+	return l;
 }
 
 static void addLineBreak(Lexer *l, const char *ptr)
@@ -102,6 +102,7 @@ Token scan(Lexer *l)
 	token.symbol.index = info.symbol;
 	token.span.length = info.length;
 
+	return token;
 }
 
 SourceData getSourceData(SourceSpan span)

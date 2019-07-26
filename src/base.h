@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +16,7 @@ static void bufFitSize(void **buf, size_t elemSize, size_t size)
 	}
 }
 #define bufFit(buf, size) bufFitSize(&(buf), sizeof(*(buf)), (size))
-#define bufPush(buf, size) (bufFitSize(&(buf), sizeof(*(buf)), (size + 1)), (buf) + (size)++)
+#define bufPush(buf, size) (bufFitSize((void**)&(buf), sizeof(*(buf)), (size + 1)), (buf) + (size)++)
 
 typedef struct {
 	void *page;

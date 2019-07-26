@@ -5,6 +5,5 @@
 
 int main(int argc, char **argv)
 {
-	Lexer *lexer = createLexer();
-
+	return 0;
 }

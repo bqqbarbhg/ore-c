@@ -2,6 +2,7 @@
 #define RHMAP_H_INCLUDED
 
 #ifndef RHMAP_NO_STDINT
+	#include <stddef.h>
 	#include <stdint.h>
 #endif
 
