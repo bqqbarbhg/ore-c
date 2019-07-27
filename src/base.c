@@ -119,7 +119,8 @@ Symbol internHash(const char *str, size_t len, uint32_t hash)
 	rhmap_insert_inline(&iter, symbol);
 	SymbolString *copy = (SymbolString*)pushSize(&pool->arena, sizeof(SymbolString) + len + 1);
 	copy->length = len;
-	memcpy(copy->data, str, len + 1);
+	memcpy(copy->data, str, len);
+	copy->data[len] = '\0';
 	pool->strings[symbol] = copy;
 	return (Symbol) { symbol };
 }

@@ -3,6 +3,7 @@
 typedef enum {
 
 	T_Error = 0,
+	T_End,
 
 	T_Newline,
 	T_Identifier,

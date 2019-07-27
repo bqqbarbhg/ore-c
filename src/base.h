@@ -7,6 +7,10 @@
 
 #include "rhmap.h"
 
+#define assert(cond) do { if (!(cond)) __debugbreak(); } while (0)
+
+#define arraySize(arr) (sizeof(arr) / sizeof(*(arr)))
+
 void *bufGrowSize(void *buf, size_t elemSize, size_t size);
 
 static void bufFitSize(void **buf, size_t elemSize, size_t size)
@@ -54,3 +58,4 @@ uint32_t symbolMapInsertArrSize(SymbolMap *map, void **arr, size_t elemSize, Sym
 uint32_t symbolMapFind(SymbolMap *map, Symbol symbol);
 
 #define symbolMapInsertArr(map, arr, symbol) symbolMapInsertArrSize((map), (arr), sizeof(**(arr)), (symbol))
+
