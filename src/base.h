@@ -13,6 +13,8 @@
 
 void *bufGrowSize(void *buf, size_t elemSize, size_t size);
 
+void bufFree(void *buf);
+
 static void bufFitSize(void **buf, size_t elemSize, size_t size)
 {
 	if (*buf && ((size_t*)*buf)[-1] <= size) { } else {

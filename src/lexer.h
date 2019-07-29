@@ -7,11 +7,21 @@ typedef enum {
 
 	T_Newline,
 	T_Identifier,
+	T_String,
+
+	T_ParenOpen, T_ParenClose,
+	T_BlockOpen, T_BlockClose,
+	T_IndexOpen, T_IndexClose,
+	T_AngleOpen, T_AngleClose,
 
 	KW_Def,
 	KW_Struct,
 
 	TokenType_Amount,
+
+	// Aliases
+	T_Less = T_AngleOpen,
+	T_Grater = T_AngleClose,
 
 } TokenType;
 

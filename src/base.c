@@ -4,21 +4,30 @@
 #define RHMAP_INLINE static
 #include "rhmap.h"
 
+void bufFree(void *buf)
+{
+	if (!buf) return;
+	free((char*)buf - 8);
+}
+
 void *bufGrowSize(void *buf, size_t elemSize, size_t size)
 {
 	if (buf) {
 		size_t oldCap = ((size_t*)buf)[-1];
 		size_t cap = oldCap * 2;
 		if (cap < size) cap = size;
-		void *newBuf = malloc(elemSize * cap);
+		char *newBuf = realloc((char*)buf - 8, 8 + elemSize * cap);
+		newBuf += 8;
 		memcpy(newBuf, buf, oldCap * elemSize);
-		memset((char*)newBuf + size * elemSize, 0, (cap - size) * elemSize);
+		memset((char*)newBuf + oldCap * elemSize, 0, (cap - oldCap) * elemSize);
 		return newBuf;
 	} else {
 		size_t cap = 128 / elemSize;
 		if (cap < size) cap = size;
-		void *newBuf = malloc(elemSize * cap);
+		char *newBuf = malloc(8 + elemSize * cap);
+		newBuf += 8;
 		memset(newBuf, 0, elemSize * cap);
+		((size_t*)newBuf)[-1] = cap;
 		return newBuf;
 	}
 }

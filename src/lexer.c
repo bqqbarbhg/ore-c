@@ -66,6 +66,15 @@ Lexer *createLexer(const LexerInput *input)
 
 		addToken(lr, T_Newline, "\n");
 
+		addToken(lr, T_ParenOpen, "(");
+		addToken(lr, T_ParenClose, ")");
+		addToken(lr, T_BlockOpen, "{");
+		addToken(lr, T_BlockClose, "}");
+		addToken(lr, T_IndexOpen, "[");
+		addToken(lr, T_IndexClose, "]");
+		addToken(lr, T_AngleOpen, "<");
+		addToken(lr, T_AngleClose, ">");
+
 		addKeyword(lr, KW_Def, "def");
 		addKeyword(lr, KW_Struct, "struct");
 	}
@@ -194,10 +203,46 @@ Token scan(Lexer *l)
 		type = T_End;
 		break;
 
+	case '(': type = T_ParenOpen; break;
+	case ')': type = T_ParenClose; break;
+	case '{': type = T_BlockOpen; break;
+	case '}': type = T_BlockClose; break;
+	case '[': type = T_IndexOpen; break;
+	case ']': type = T_IndexClose; break;
+	case '<': type = T_AngleOpen; break;
+	case '>': type = T_AngleClose; break;
+
 	case '\n':
 		addLineBreak(l, ptr);
 		type = T_Newline;
 		break;
+
+	case '"': {
+		uint32_t hash = symbolHashInit();
+		hash = symbolHashStep(hash, '"');
+		type = T_String;
+		ptr++;
+		while (ptr != end && *ptr != '"') {
+			hash = symbolHashStep(hash, *ptr);
+			if (*ptr == '\\') {
+				ptr++;
+				if (ptr != end) {
+					hash = symbolHashStep(hash, *ptr);
+				} else {
+					type = T_Error;
+					break;
+				}
+			}
+			ptr++;
+		}
+		if (ptr != end) {
+			hash = symbolHashStep(hash, '"');
+			ptr++;
+			token.symbol = internHash(begin, ptr - begin, hash);
+		} else {
+			type = T_Error;
+		}
+	  } break;
 
 	default: {
 		uint32_t hash = symbolHashInit();
@@ -249,6 +294,18 @@ SourceData getSourceData(SourceSpan span)
 	};
 
 	uint32_t offset = span.offset;
+
+	// TODO: Binary search
+	uint32_t line;
+	uint32_t lineBegin = 0;
+	for (line = 0; line < file->numLineBreaks; line++) {
+		if (offset >= file->lineBreaks[line]) {
+			lineBegin = file->lineBreaks[line];
+		}
+	}
+
+	data.line = line + 1;
+	data.col = offset - lineBegin;
 
 	return data;
 }
