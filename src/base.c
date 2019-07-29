@@ -18,7 +18,6 @@ void *bufGrowSize(void *buf, size_t elemSize, size_t size)
 		if (cap < size) cap = size;
 		char *newBuf = realloc((char*)buf - 8, 8 + elemSize * cap);
 		newBuf += 8;
-		memcpy(newBuf, buf, oldCap * elemSize);
 		memset((char*)newBuf + oldCap * elemSize, 0, (cap - oldCap) * elemSize);
 		return newBuf;
 	} else {
