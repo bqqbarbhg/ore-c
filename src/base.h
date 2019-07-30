@@ -4,14 +4,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "rhmap.h"
 
 #include "buf.h"
 
 typedef buf_type(uint32_t) u32_buf;
-
-#define assert(cond) do { if (!(cond)) __debugbreak(); } while (0)
 
 #define arraySize(arr) (sizeof(arr) / sizeof(*(arr)))
 
