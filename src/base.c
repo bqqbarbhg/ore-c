@@ -1,65 +1,10 @@
 #include "base.h"
 #include <stdlib.h>
 
+#include "arena.h"
+
 #define RHMAP_INLINE static
 #include "rhmap.h"
-
-void bufFree(void *buf)
-{
-	if (!buf) return;
-	free((char*)buf - 8);
-}
-
-void *bufGrowSize(void *buf, size_t elemSize, size_t size)
-{
-	if (buf) {
-		size_t oldCap = ((size_t*)buf)[-1];
-		size_t cap = oldCap * 2;
-		if (cap < size) cap = size;
-		char *newBuf = realloc((char*)buf - 8, 8 + elemSize * cap);
-		newBuf += 8;
-		memset((char*)newBuf + oldCap * elemSize, 0, (cap - oldCap) * elemSize);
-		return newBuf;
-	} else {
-		size_t cap = 128 / elemSize;
-		if (cap < size) cap = size;
-		char *newBuf = malloc(8 + elemSize * cap);
-		newBuf += 8;
-		memset(newBuf, 0, elemSize * cap);
-		((size_t*)newBuf)[-1] = cap;
-		return newBuf;
-	}
-}
-
-void *pushSize(Arena *arena, size_t size)
-{
-	size = (size + 7u) & ~7u;
-	size_t pos = arena->pos;
-	if (pos + size <= arena->size) {
-		arena->pos = pos + size;
-		return (char*)arena->page + pos;
-	} else {
-		size_t pageSize = arena->size * 2;
-		if (pageSize < size + 8) pageSize = size + 8;
-		if (pageSize < 4096) pageSize = 4096;
-		char *newPage = (char*)malloc(pageSize);
-		*(void**)newPage = arena->page;
-		arena->page = newPage;
-		arena->pos = 8;
-		arena->size = size;
-		return newPage + 8;
-	}
-}
-
-void freeArena(Arena *arena)
-{
-	void *page = arena->page;
-	while (page) {
-		void *toFree = page;
-		page = *(void**)page;
-		free(toFree);
-	}
-}
 
 uint32_t symbolHash(const char *str, size_t len)
 {
@@ -83,7 +28,7 @@ Symbol internZ(const char *str)
 
 typedef struct {
 	rhmap map;
-	Arena arena;
+	arena arena;
 	SymbolString **strings;
 } StringPool;
 
@@ -125,7 +70,7 @@ Symbol internHash(const char *str, size_t len, uint32_t hash)
 
 	symbol = pool->map.size + 1;
 	rhmap_insert_inline(&iter, symbol);
-	SymbolString *copy = (SymbolString*)pushSize(&pool->arena, sizeof(SymbolString) + len + 1);
+	SymbolString *copy = (SymbolString*)arena_push_size_uninit(&pool->arena, sizeof(SymbolString) + len + 1);
 	copy->length = len;
 	memcpy(copy->data, str, len);
 	copy->data[len] = '\0';

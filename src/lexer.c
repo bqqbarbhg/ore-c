@@ -1,16 +1,16 @@
 #include "base.h"
 #include "lexer.h"
+#include "bsearch.h"
 
 typedef struct {
 	const char *filename;
 	const char *data;
 	size_t size;
-	uint32_t *lineBreaks;
-	uint32_t numLineBreaks;
+	u32_buf lineBreaks;
 } InputFile;
 
-InputFile *g_inputFiles;
-uint32_t g_numInputFiles;
+typedef buf_type(InputFile) InputFile_buf;
+InputFile_buf g_inputFiles;
 
 typedef struct {
 	uint8_t symbol;
@@ -51,8 +51,8 @@ Lexer *createLexer(const LexerInput *input)
 	Lexer *l = malloc(sizeof(Lexer));
 	memset(l, 0, sizeof(Lexer));
 
-	l->fileIndex = g_numInputFiles;
-	InputFile *file = bufPush(g_inputFiles, g_numInputFiles);
+	l->fileIndex = g_inputFiles.size;
+	InputFile *file = buf_push_zero(&g_inputFiles);
 	file->filename = input->filename;
 	file->data = input->source;
 	file->size = input->size;
@@ -84,9 +84,9 @@ Lexer *createLexer(const LexerInput *input)
 
 static void addLineBreak(Lexer *l, const char *ptr)
 {
-	InputFile *file = &g_inputFiles[l->fileIndex];
-	uint32_t *offset = bufPush(file->lineBreaks, file->numLineBreaks);
-	*offset = ptr - l->begin;
+	InputFile *file = &g_inputFiles.data[l->fileIndex];
+	uint32_t offset = ptr - l->begin;
+	buf_push(&file->lineBreaks, &offset);
 }
 
 typedef struct {
@@ -285,7 +285,7 @@ Token scan(Lexer *l)
 
 SourceData getSourceData(SourceSpan span)
 {
-	InputFile *file = &g_inputFiles[span.file];
+	InputFile *file = &g_inputFiles.data[span.file];
 	SourceData data = {
 		.filename = file->filename,
 		.data = file->data + span.offset,
@@ -295,16 +295,17 @@ SourceData getSourceData(SourceSpan span)
 
 	uint32_t offset = span.offset;
 
-	// TODO: Binary search
-	uint32_t line;
+	size_t line;
+	bsearch_range range = { 0, file->lineBreaks.size };
+	while (bsearch_next(&range, &line)) {
+		bsearch_step(&range, file->lineBreaks.data[line] >= offset);
+	}
 	uint32_t lineBegin = 0;
-	for (line = 0; line < file->numLineBreaks; line++) {
-		if (offset >= file->lineBreaks[line]) {
-			lineBegin = file->lineBreaks[line];
-		}
+	if (line > 0) {
+		lineBegin = file->lineBreaks.data[line - 1];
 	}
 
-	data.line = line + 1;
+	data.line = (uint32_t)line + 1;
 	data.col = offset - lineBegin;
 
 	return data;

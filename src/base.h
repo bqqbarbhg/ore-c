@@ -7,30 +7,13 @@
 
 #include "rhmap.h"
 
+#include "buf.h"
+
+typedef buf_type(uint32_t) u32_buf;
+
 #define assert(cond) do { if (!(cond)) __debugbreak(); } while (0)
 
 #define arraySize(arr) (sizeof(arr) / sizeof(*(arr)))
-
-void *bufGrowSize(void *buf, size_t elemSize, size_t size);
-
-void bufFree(void *buf);
-
-static void bufFitSize(void **buf, size_t elemSize, size_t size)
-{
-	if (*buf && ((size_t*)*buf)[-1] <= size) { } else {
-		*buf = bufGrowSize(*buf, elemSize, size);
-	}
-}
-#define bufFit(buf, size) bufFitSize(&(buf), sizeof(*(buf)), (size))
-#define bufPush(buf, size) (bufFitSize((void**)&(buf), sizeof(*(buf)), (size + 1)), (buf) + (size)++)
-
-typedef struct {
-	void *page;
-	size_t pos, size;
-} Arena;
-
-void *pushSize(Arena *arena, size_t size);
-void freeArena(Arena *arena);
 
 typedef struct {
 	uint32_t index;
