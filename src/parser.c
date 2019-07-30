@@ -172,6 +172,9 @@ static Ast *parseToplevel(Parser *p)
 		expr->expr = parseExpr(p);
 		if (!expr->expr) return NULL;
 		expr->ast.span = expr->expr->span;
+		if (!accept(p, T_Newline) && !accept(p, T_End)) {
+			errorAtToken(p, "Expected a newline after statement");
+		}
 		return &expr->ast;
 	}
 }
