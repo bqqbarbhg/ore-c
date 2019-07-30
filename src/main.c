@@ -1,6 +1,8 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "base.h"
 #include "lexer.h"
+#include "parser.h"
+#include "error.h"
 
 #include <stdio.h>
 
@@ -29,13 +31,18 @@ int main(int argc, char **argv)
 	size_t size;
 	char *src = readFile(filename, &size);
 
+	ErrorList errors = { 0 };
+
 	LexerInput input = {
 		.source = src,
 		.size = size,
 		.filename = filename,
+		.errorList = &errors,
 	};
-	Lexer *l = createLexer(&input);
 
+
+#if 0
+	Lexer *l = createLexer(&input);
 	Token tok;
 	do {
 		tok = scan(l);
@@ -57,6 +64,21 @@ int main(int argc, char **argv)
 		}
 
 	} while (tok.type != T_End);
+#else
+	Ast *ast = parse(&input);
+	if (ast) {
+		dumpAst(ast);
+		freeAst(ast);
+	} else {
+		for (uint32_t i = 0; i < errors.errors.size; i++) {
+			Error *error = &errors.errors.data[i];
+			SourceData sd = getSourceData(error->span);
+			fprintf(stderr, "%s:%u:%u: Error: %s\n",
+				sd.filename, sd.line, sd.col, error->message);
+		}
+	}
+#endif
+
 
 	return 0;
 }

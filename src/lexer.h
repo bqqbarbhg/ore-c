@@ -14,6 +14,8 @@ typedef enum {
 	T_IndexOpen, T_IndexClose,
 	T_AngleOpen, T_AngleClose,
 
+	T_Add, T_Sub, T_Mul, T_Div, T_Mod,
+
 	KW_Def,
 	KW_Struct,
 
@@ -50,9 +52,11 @@ typedef struct {
 	const char *source;
 	size_t size;
 	const char *filename;
+	struct ErrorList_s *errorList;
 } LexerInput;
 
 Lexer *createLexer(const LexerInput *input);
+void freeLexer(Lexer *l);
 
 Token scan(Lexer *l);
 

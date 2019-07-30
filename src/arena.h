@@ -17,7 +17,7 @@ typedef struct arena_s {
 void arena_init(arena *arena);
 void arena_reset(arena *arena);
 
-void arena_new_page(arena *arena, size_t size);
+uint32_t arena_new_page(arena *arena, size_t size);
 
 ARENA_INLINE void *arena_push_size_zero(arena *arena, size_t size)
 {
@@ -25,7 +25,7 @@ ARENA_INLINE void *arena_push_size_zero(arena *arena, size_t size)
 	void *result;
 	size = (size + 7u) & ~(size_t)7u;
 	if (pos + size <= arena->capacity) { } else {
-		arena_new_page(arena, size);
+		pos = arena_new_page(arena, size);
 	}
 	arena->pos += size;
 	result = (char*)arena->data + pos;
@@ -38,7 +38,7 @@ ARENA_INLINE void *arena_push_size_uninit(arena *arena, size_t size)
 	size_t pos = arena->pos;
 	size = (size + 7u) & ~(size_t)7u;
 	if (pos + size <= arena->capacity) { } else {
-		arena_new_page(arena, size);
+		pos = arena_new_page(arena, size);
 	}
 	arena->pos += size;
 	return (char*)arena->data + pos;
@@ -50,7 +50,7 @@ ARENA_INLINE void *arena_push_size_copy(arena *arena, size_t size, const void *d
 	void *result;
 	size = (size + 7u) & ~(size_t)7u;
 	if (pos + size <= arena->capacity) { } else {
-		arena_new_page(arena, size);
+		pos = arena_new_page(arena, size);
 	}
 	arena->pos += size;
 	result = (char*)arena->data + pos;
@@ -88,16 +88,17 @@ void arena_reset(arena *arena)
 	arena->pos = arena->capacity = 0;
 }
 
-void arena_new_page(arena *arena, size_t size)
+uint32_t arena_new_page(arena *arena, size_t size)
 {
 	size_t capacity = arena->capacity * 2;
-	void *old_page = arena->data;;
+	void *old_page = arena->data;
 	if (capacity < 4096) capacity = 4096;
 	if (capacity < size + 8) capacity = size + 8;
 	arena->data = malloc(capacity);
 	arena->pos = 8;
 	arena->capacity = capacity;
 	*(void**)arena->data = old_page;
+	return 8;
 }
 
 #endif

@@ -1,5 +1,2 @@
 
-def main() {
-	print("Hello!\n")
-}
-
+(a + (b + c))

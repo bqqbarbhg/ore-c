@@ -75,11 +75,22 @@ Lexer *createLexer(const LexerInput *input)
 		addToken(lr, T_AngleOpen, "<");
 		addToken(lr, T_AngleClose, ">");
 
+		addToken(lr, T_Add, "+");
+		addToken(lr, T_Sub, "-");
+		addToken(lr, T_Mul, "*");
+		addToken(lr, T_Div, "/");
+		addToken(lr, T_Mod, "%");
+
 		addKeyword(lr, KW_Def, "def");
 		addKeyword(lr, KW_Struct, "struct");
 	}
 
 	return l;
+}
+
+void freeLexer(Lexer *l)
+{
+	free(l);
 }
 
 static void addLineBreak(Lexer *l, const char *ptr)
@@ -113,9 +124,15 @@ static const CodepointRange identContRanges[] = {
 
 static int codepointInRange(uint32_t c, const CodepointRange *ranges, size_t count)
 {
-	// TODO: Could do binary search here
-	for (size_t i = 0; i < count; i++) {
-		if (c >= ranges[i].lo && c <= ranges[i].hi) return 1;
+	bsearch_range range = { 0, count };
+	size_t i;
+	while (bsearch_next_until(&range, &i, 16)) {
+		bsearch_step(&range, ranges[i].hi >= c);
+	}
+	for (i = range.lo; i != range.hi; i++) {
+		if (ranges[i].hi >= c) {
+			return ranges[i].lo <= c;
+		}
 	}
 	return 0;
 }
@@ -212,6 +229,12 @@ Token scan(Lexer *l)
 	case '<': type = T_AngleOpen; break;
 	case '>': type = T_AngleClose; break;
 
+	case '+': type = T_Add; break;
+	case '-': type = T_Sub; break;
+	case '*': type = T_Mul; break;
+	case '/': type = T_Div; break;
+	case '%': type = T_Mod; break;
+
 	case '\n':
 		addLineBreak(l, ptr);
 		type = T_Newline;
@@ -305,8 +328,21 @@ SourceData getSourceData(SourceSpan span)
 		lineBegin = file->lineBreaks.data[line - 1];
 	}
 
+	// Rewind to first non-newline character for column
+	uint32_t endOffset = 0;
+	if (file->size > 0) {
+		const char *src = file->data;
+		endOffset = offset < file->size ? offset : file->size - 1;
+		while (endOffset > lineBegin) {
+			char c = src[endOffset];
+			if (c != '\n' && c != '\r')
+				break;
+			endOffset--;
+		}
+	}
+
 	data.line = (uint32_t)line + 1;
-	data.col = offset - lineBegin;
+	data.col = endOffset - lineBegin;
 
 	return data;
 }
