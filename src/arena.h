@@ -46,7 +46,7 @@ ARENA_INLINE void *arena_push_size_uninit(arena *arena, size_t size)
 
 ARENA_INLINE void *arena_push_size_copy(arena *arena, size_t size, const void *data)
 {
-	size_t pos = arena->pos;
+	size_t pos = arena->pos, copy_size = size;
 	void *result;
 	size = (size + 7u) & ~(size_t)7u;
 	if (pos + size <= arena->capacity) { } else {
@@ -54,7 +54,7 @@ ARENA_INLINE void *arena_push_size_copy(arena *arena, size_t size, const void *d
 	}
 	arena->pos += size;
 	result = (char*)arena->data + pos;
-	memcpy(result, data, size);
+	memcpy(result, data, copy_size);
 	return result;
 }
 

@@ -100,6 +100,7 @@ static Ast *pushAstSize(Parser *p, AstType type, size_t size)
 #define pushAstExtra(p, type, extra) (type*)pushAstSize((p), A_##type, sizeof(type) + (extra))
 
 static Ast *parseExpr(Parser *p);
+static Ast *parseStatement(Parser *p);
 
 static Ast *parseAtom(Parser *p)
 {
@@ -108,6 +109,11 @@ static Ast *parseAtom(Parser *p)
 		ident->name = p->prev;
 		ident->ast.span = p->prev.span;
 		return &ident->ast;
+	} else if (accept(p, T_Number)) {
+		AstNumber *number = pushAst(p, AstNumber);
+		number->value = p->prev;
+		number->ast.span = p->prev.span;
+		return &number->ast;
 	} else if (accept(p, T_ParenOpen)) {
 		SourceSpan begin = p->prev.span;
 		AstParen *paren = pushAst(p, AstParen);
@@ -120,6 +126,13 @@ static Ast *parseAtom(Parser *p)
 		}
 		paren->ast.span = mergeSpan(begin, p->prev.span);
 		return &paren->ast;
+	} else if (accept(p, T_Sub)) {
+		AstUnop *unop = pushAst(p, AstUnop);
+		unop->op = p->prev;
+		unop->expr = parseAtom(p);
+		if (!unop->expr) return NULL;
+		unop->ast.span = mergeSpan(unop->op.span, unop->expr->span);
+		return &unop->ast;
 	} else {
 		errorAtToken(p, "Expected an expression");
 		return NULL;
@@ -129,6 +142,7 @@ static Ast *parseAtom(Parser *p)
 static Ast *parseFactor(Parser *p)
 {
 	Ast *left = parseAtom(p);
+	if (!left) return NULL;
 	while (accept(p, T_Mul) || accept(p, T_Div) || accept(p, T_Mod)) {
 		AstBinop *binop = pushAst(p, AstBinop);
 		binop->op = p->prev;
@@ -145,6 +159,7 @@ static Ast *parseFactor(Parser *p)
 static Ast *parseTerm(Parser *p)
 {
 	Ast *left = parseFactor(p);
+	if (!left) return NULL;
 	while (accept(p, T_Add) || accept(p, T_Sub)) {
 		AstBinop *binop = pushAst(p, AstBinop);
 		binop->op = p->prev;
@@ -158,15 +173,156 @@ static Ast *parseTerm(Parser *p)
 	return left;
 }
 
-static Ast *parseExpr(Parser *p)
+static Ast *parseCompare(Parser *p)
 {
-	return parseTerm(p);
+	Ast *left = parseTerm(p);
+	if (!left) return NULL;
+	while (accept(p, T_Equal) || accept(p, T_NotEqual)
+		|| accept(p, T_Less) || accept(p, T_Greater)) {
+		AstBinop *binop = pushAst(p, AstBinop);
+		binop->op = p->prev;
+		binop->left = left;
+		binop->right = parseTerm(p);
+		if (!binop->right) return NULL;
+		binop->ast.span = mergeSpan(binop->left->span, binop->right->span);
+		left = &binop->ast;
+	}
+
+	return left;
 }
 
-static Ast *parseToplevel(Parser *p)
+static Ast *parseAndOr(Parser *p)
+{
+	Ast *left = parseCompare(p);
+	if (!left) return NULL;
+	while (accept(p, T_And) || accept(p, T_Or)) {
+		AstBinop *binop = pushAst(p, AstBinop);
+		binop->op = p->prev;
+		binop->left = left;
+		binop->right = parseCompare(p);
+		if (!binop->right) return NULL;
+		binop->ast.span = mergeSpan(binop->left->span, binop->right->span);
+		left = &binop->ast;
+	}
+
+	return left;
+}
+
+static Ast *parseExpr(Parser *p)
+{
+	return parseAndOr(p);
+}
+
+static IfBranch finishIf(Parser *p, Token ifToken)
+{
+	IfBranch result = { 0 };
+	Token open = p->token;
+	if (!accept(p, T_ParenOpen)) {
+		errorAt(p, ifToken.span, "Expected '(' before if condition");
+		return result;
+	}
+
+	result.cond = parseExpr(p);
+	if (!result.cond) return result;
+	if (!accept(p, T_ParenClose)) {
+		errorAt(p, open.span, "Unclosed if condition '('");
+		errorAtToken(p, "Expected closing ')'");
+		return result;
+	}
+
+	result.body = parseStatement(p);
+	if (!result.body) {
+		if (!p->failed) {
+			errorAt(p, ifToken.span, "Missing 'if' body");
+		}
+		return result;
+	}
+
+	return result;
+}
+
+static AstBlock *finishBlock(Parser *p, Token blockOpen)
+{
+	Ast *localStatements[128];
+	Ast_ptr_buf statements = buf_local(localStatements);
+
+	while (!accept(p, T_BlockClose) && !p->failed) {
+		if (p->token.type == T_End) {
+			errorAt(p, blockOpen.span, "Unclosed function body");
+			errorAtToken(p, "Expected closing '}'");
+			break;
+		}
+
+		Ast *ast = parseStatement(p);
+		if (ast) {
+			buf_push(&statements, &ast);
+		}
+	}
+	Token blockClose = p->prev;
+
+	AstBlock *block = NULL;
+	if (!p->failed) {
+		block = pushAstExtra(p, AstBlock, sizeof(Ast*) * statements.size);
+		block->numStatements = statements.size;
+		memcpy(block->statements, statements.data, sizeof(Ast*) * statements.size);
+		block->ast.span = mergeSpan(blockOpen.span, blockClose.span);
+	}
+	buf_reset(&statements);
+	return block;
+}
+
+static Ast *parseStatement(Parser *p)
 {
 	if (accept(p, T_Newline)) {
 		return NULL;
+	} else if (accept(p, T_BlockOpen)) {
+		AstBlock *block = finishBlock(p, p->prev);
+		return block ? &block->ast : NULL;
+	} else if (accept(p, KW_If)) {
+		Token firstIf = p->prev;
+
+		IfBranch localBranches[32];
+		buf_type(IfBranch) branches = buf_local(localBranches);
+
+		IfBranch *firstBranch = buf_push_uninit(&branches);
+		*firstBranch = finishIf(p, firstIf);
+
+		Ast *elseBody = NULL;
+		while (accept(p, KW_Else) && !p->failed) {
+			Token nextElse = p->prev;
+			if (accept(p, KW_If)) {
+				Token nextIf = p->prev;
+				IfBranch *nextBranch = buf_push_uninit(&branches);
+				*nextBranch = finishIf(p, nextIf);
+			} else {
+				elseBody = parseStatement(p);
+				if (!elseBody && !p->failed) {
+					errorAt(p, nextElse.span, "Missing 'else' body");
+				}
+				break;
+			}
+		}
+
+		AstIf *ast = NULL;
+		if (!p->failed) {
+			ast = pushAstExtra(p, AstIf, sizeof(IfBranch) * branches.size);
+			ast->numBranches = branches.size;
+			memcpy(ast->branches, branches.data, sizeof(IfBranch) * branches.size);
+			ast->elseBranch = elseBody;
+			ast->ast.span = mergeSpan(firstIf.span, p->prev.span);
+		}
+		buf_reset(&branches);
+		return &ast->ast;
+	} else if (accept(p, KW_Return)) {
+		Token returnTok = p->prev;
+		AstReturn *ast = pushAst(p, AstReturn);
+		ast->expr = parseExpr(p);
+		if (!ast->expr) return NULL;
+		if (!accept(p, T_Newline) && !accept(p, T_End)) {
+			errorAtToken(p, "Expected a newline after return");
+		}
+		ast->ast.span = mergeSpan(returnTok.span, ast->expr->span);
+		return &ast->ast;
 	} else {
 		AstExpr *expr = pushAst(p, AstExpr);
 		expr->expr = parseExpr(p);
@@ -176,6 +332,99 @@ static Ast *parseToplevel(Parser *p)
 			errorAtToken(p, "Expected a newline after statement");
 		}
 		return &expr->ast;
+	}
+}
+
+static Ast *parseType(Parser *p)
+{
+	if (accept(p, T_Identifier)) {
+		AstIdent *ident = pushAst(p, AstIdent);
+		ident->name = p->prev;
+		ident->ast.span = p->prev.span;
+		return &ident->ast;
+	} else {
+		errorAtToken(p, "Expected a type");
+		return NULL;
+	}
+}
+
+static Ast *parseToplevel(Parser *p)
+{
+	if (accept(p, T_Newline)) {
+		return NULL;
+	} else if (accept(p, KW_Def)) {
+		Token def = p->prev;
+		Token name = p->token;
+		if (!accept(p, T_Identifier)) {
+			errorAt(p, def.span, "Expected function name");
+			return NULL;
+		}
+		Token parenOpen = p->token;
+		if (!accept(p, T_ParenOpen)) {
+			errorAt(p, name.span, "Expected function argument list");
+			return NULL;
+		}
+
+		DeclAst localDecls[16];
+		buf_type(DeclAst) decls = buf_local(localDecls);
+
+		Token parenClose = p->token;
+		if (!accept(p, T_ParenClose)) {
+			do {
+				DeclAst *decl = buf_push_uninit(&decls);
+				decl->name = p->token;
+				if (!accept(p, T_Identifier)) {
+					errorAtPrev(p, "Expected argument name");
+					break;
+				}
+				if (!accept(p, T_Colon)) {
+					errorAtPrev(p, "Expected ':' before argument type");
+					break;
+				}
+				decl->type = parseType(p);
+				if (!decl->type) break;
+			} while (accept(p, T_Comma));
+
+			parenClose = p->token;
+			if (!accept(p, T_ParenClose)) {
+				errorAt(p, parenOpen.span, "Expected closing ')'");
+			}
+		}
+
+		Ast *returnType = NULL;
+		if (accept(p, T_Colon)) {
+			returnType = parseType(p);
+		} else {
+			// TODO: Void/infered by default?
+			errorAt(p, parenClose.span, "Expected ':' before return type");
+			return NULL;
+		}
+
+		AstBlock *block;
+		if (!p->failed) {
+			Token blockOpen = p->token;
+			if (accept(p, T_BlockOpen)) {
+				block = finishBlock(p, blockOpen);
+			} else {
+				// TODO: Function prototypes?
+				errorAtToken(p, "Expected function body");
+			}
+		}
+
+		AstDef *ast = NULL;
+		if (!p->failed) {
+			ast = pushAstExtra(p, AstDef, sizeof(DeclAst) * decls.size);
+			ast->numParams = decls.size;
+			memcpy(ast->params, decls.data, sizeof(DeclAst) * decls.size);
+			ast->body = block;
+			ast->returnType = returnType;
+			ast->ast.span = mergeSpan(def.span, parenClose.span);
+		}
+		buf_reset(&decls);
+		return &ast->ast;
+	} else {
+		errorAtToken(p, "Invalid top-level declaration");
+		return NULL;
 	}
 }
 

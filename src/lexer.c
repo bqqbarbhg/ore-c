@@ -75,14 +75,28 @@ Lexer *createLexer(const LexerInput *input)
 		addToken(lr, T_AngleOpen, "<");
 		addToken(lr, T_AngleClose, ">");
 
+		addToken(lr, T_Colon, ":");
+		addToken(lr, T_Comma, ",");
+
 		addToken(lr, T_Add, "+");
 		addToken(lr, T_Sub, "-");
 		addToken(lr, T_Mul, "*");
 		addToken(lr, T_Div, "/");
 		addToken(lr, T_Mod, "%");
 
+		addToken(lr, T_Not, "!");
+		addToken(lr, T_Assign , "=");
+		addToken(lr, T_Equal , "==");
+		addToken(lr, T_NotEqual , "!=");
+
+		addToken(lr, T_Or, "||");
+		addToken(lr, T_And, "&&");
+
 		addKeyword(lr, KW_Def, "def");
-		addKeyword(lr, KW_Struct, "struct");
+		addKeyword(lr, KW_If, "if");
+		addKeyword(lr, KW_Else, "else");
+		addKeyword(lr, KW_While, "while");
+		addKeyword(lr, KW_Return, "return");
 	}
 
 	return l;
@@ -229,11 +243,31 @@ Token scan(Lexer *l)
 	case '<': type = T_AngleOpen; break;
 	case '>': type = T_AngleClose; break;
 
+	case ':': type = T_Colon; break;
+	case ',': type = T_Comma; break;
+
 	case '+': type = T_Add; break;
 	case '-': type = T_Sub; break;
 	case '*': type = T_Mul; break;
 	case '/': type = T_Div; break;
 	case '%': type = T_Mod; break;
+
+	case '|':
+		if (next == '|') type = T_Or;
+		break;
+	case '&':
+		if (next == '&') type = T_And;
+		break;
+
+	case '!':
+		if (next == '=') type = T_NotEqual;
+		else type = T_Not;
+		break;
+
+	case '=':
+		if (next == '=') type = T_Equal;
+		else type = T_Assign;
+		break;
 
 	case '\n':
 		addLineBreak(l, ptr);
@@ -266,6 +300,17 @@ Token scan(Lexer *l)
 			type = T_Error;
 		}
 	  } break;
+
+	case '0': case '1': case '2': case '3': case '4':
+	case '5': case '6': case '7': case '8': case '9': {
+		uint32_t hash = symbolHashInit();
+		while (ptr != end && *ptr >= '0' && *ptr <= '9') {
+			hash = symbolHashStep(hash, *ptr);
+			ptr++;
+		}
+		token.symbol = internHash(begin, ptr - begin, hash);
+		type = T_Number;
+	} break;
 
 	default: {
 		uint32_t hash = symbolHashInit();

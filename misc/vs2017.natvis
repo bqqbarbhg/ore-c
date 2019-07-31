@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
   <Type Name="Symbol">
-    <DisplayString>{g_stringPool.strings[index]->data}</DisplayString>
+    <DisplayString>{g_stringPool.strings[index]->data,s}</DisplayString>
   </Type>
+  <Type Name="SourceSpan">
+    <DisplayString>{g_inputFiles.data[file].data + offset,[length]s}</DisplayString>
+  </Type>
+
 </AutoVisualizer>

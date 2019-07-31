@@ -6,7 +6,7 @@ void pushError(ErrorList *list, SourceSpan span, const char *message)
 	if (!list) return;
 	Error err;
 	err.span = span;
-	err.message = arena_push_size_copy(&list->arena, strlen(message + 1), message);
+	err.message = arena_push_size_copy(&list->arena, strlen(message) + 1, message);
 	buf_push(&list->errors, &err);
 }
 

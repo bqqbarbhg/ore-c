@@ -8,22 +8,36 @@ typedef enum {
 	T_Newline,
 	T_Identifier,
 	T_String,
+	T_Number,
 
 	T_ParenOpen, T_ParenClose,
 	T_BlockOpen, T_BlockClose,
 	T_IndexOpen, T_IndexClose,
 	T_AngleOpen, T_AngleClose,
 
+	T_Colon,
+	T_Comma,
+
 	T_Add, T_Sub, T_Mul, T_Div, T_Mod,
 
+	T_Not,
+	T_Assign,
+	T_Equal,
+	T_NotEqual,
+
+	T_Or, T_And,
+
 	KW_Def,
-	KW_Struct,
+	KW_If,
+	KW_Else,
+	KW_While,
+	KW_Return,
 
 	TokenType_Amount,
 
 	// Aliases
 	T_Less = T_AngleOpen,
-	T_Grater = T_AngleClose,
+	T_Greater = T_AngleClose,
 
 } TokenType;
 
