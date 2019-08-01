@@ -696,7 +696,7 @@ void dumpFunc(Module *module, Func *func)
 						source++;
 						length--;
 					}
-					printf("  // %.*s\n", length, source);
+					printf("  // %.*s\n", (int)length, source);
 				}
 				prevLine = data.line;
 			}

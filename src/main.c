@@ -45,7 +45,7 @@ int dumpHtmlPre(AstDumper *ad, Ast *ast)
 	const char *name = getAstTypeName(ast->type);
 	if (d->level > 0) {
 		fprintf(d->file, "<span class=\"ast-%u\" title=\"%s\">",
-			d->level % arraySize(htmlHoverColors), name);
+			d->level % (uint32_t)arraySize(htmlHoverColors), name);
 	} else {
 		fprintf(d->file, "<span>");
 	}

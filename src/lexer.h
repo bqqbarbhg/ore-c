@@ -77,4 +77,4 @@ void freeLexer(Lexer *l);
 Token scan(Lexer *l);
 
 SourceData getSourceData(SourceSpan span);
-int getSourceLine(uint32_t fileIndex, uint32_t line, const char **ptr, uint32_t *length);
+int getSourceLine(uint32_t fileIndex, uint32_t line, const char **ptr, size_t *length);
