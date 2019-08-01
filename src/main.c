@@ -168,7 +168,7 @@ int main(int argc, char **argv)
 
 		Module module;
 		if (compile(compiler, &module)) {
-			printf("Compiled succesfully!\n");
+			dumpModule(&module);
 		} else {
 			for (uint32_t i = 0; i < errors.errors.size; i++) {
 				Error *error = &errors.errors.data[i];
@@ -177,6 +177,7 @@ int main(int argc, char **argv)
 					sd.filename, sd.line, sd.col, error->message);
 			}
 		}
+
 
 		freeCompiler(compiler);
 		freeAst(ast);

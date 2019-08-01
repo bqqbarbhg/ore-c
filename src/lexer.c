@@ -57,6 +57,8 @@ Lexer *createLexer(const LexerInput *input)
 	file->data = input->source;
 	file->size = input->size;
 
+	buf_push(&file->lineBreaks, &(uint32_t) { 0 });
+
 	l->begin = l->ptr = input->source;
 	l->end = l->ptr + input->size;
 
@@ -395,8 +397,34 @@ SourceData getSourceData(SourceSpan span)
 		}
 	}
 
-	data.line = (uint32_t)line + 1;
+	data.line = (uint32_t)line;
 	data.col = endOffset - lineBegin;
 
 	return data;
+}
+
+int getSourceLine(uint32_t fileIndex, uint32_t line, const char **ptr, size_t *length)
+{
+	InputFile *file = &g_inputFiles.data[fileIndex];
+	uint32_t lineIndex = line - 1;
+	if (lineIndex >= file->lineBreaks.size) return 0;
+
+	uint32_t begin = file->lineBreaks.data[lineIndex] + 1;
+	uint32_t end = file->size;
+	if (lineIndex + 1 < file->lineBreaks.size) {
+		end = file->lineBreaks.data[lineIndex + 1];
+		// Rewind to first non-newline character for column
+		while (end > begin) {
+			char c = file->data[end - 1];
+			if (c != '\n' && c != '\r')
+				break;
+			end--;
+		}
+	}
+
+	if (begin > end) return 0;
+
+	*ptr = file->data + begin;
+	*length = end - begin;
+	return 1;
 }

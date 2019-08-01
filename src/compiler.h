@@ -13,9 +13,9 @@ typedef struct {
 } TypeRef;
 
 typedef enum {
-	O_Global,  // dst = &ext
 	O_Assign,  // dst = a
 	O_Arith,   // dst = a <ext> b  (+ - * /)
+	O_Unary,   // dst = <ext> a    (-)
 	O_Compare, // dst = a <ext> b  (== != < <= > >=)
 	O_Arg,     // args[ext] = a
 	O_Call,    // dst = a(args)
@@ -29,26 +29,29 @@ typedef enum {
 	OA_Mul, // dst = a * b
 	OA_Div, // dst = a / b
 	OA_Mod, // dst = a % b
-	OA_Neg, // dst = -a
 } OpArith;
 
 typedef enum {
-	OC_Equal,     // dst = a == b
-	OC_NotEqual,  // dst = a != b
-	OC_Less,      // dst = a < b
-	OC_LessEq,    // dst = a <= b
-	OA_Greater,   // dst = a > b
-	OA_GreaterEq, // dst = a >= b
+	OU_Neg, // dst = -a
+} OpUnary;
+
+typedef enum {
+	OC_Eq, // dst = a == b
+	OC_Ne, // dst = a != b
+	OC_Lt, // dst = a < b
+	OC_Le, // dst = a <= b
+	OC_Gt, // dst = a > b
+	OC_Ge, // dst = a >= b
 } OpCompare;
 
 typedef enum {
 	VK_Error,
-	VK_None,
 	VK_Local,
 	VK_Temp,
+	VK_Global,
 	VK_LocalRef,
 	VK_TempRef,
-	VK_GlobalConst,
+	VK_GlobalRef,
 	VK_Const,
 	VK_Block,
 } ValueKind;
@@ -56,8 +59,8 @@ typedef enum {
 typedef struct {
 	union {
 		struct {
-			ValueKind kind : 4;
-			uint32_t index : 28;
+			ValueKind kind : 5;
+			uint32_t index : 27;
 		};
 		uint32_t packed;
 	};
@@ -147,3 +150,6 @@ void freeCompiler(Compiler *c);
 
 int addCompileAst(Compiler *c, Ast *ast);
 int compile(Compiler *c, Module *result);
+
+void dumpFunc(Module *module, Func *func);
+void dumpModule(Module *module);

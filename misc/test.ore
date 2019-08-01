@@ -1,23 +1,8 @@
 
-def main(): Int {
-	var result = pow(2, exponent)
-	printInt(result)
-	return 0
-}
-
-def pow(num: Int, exp: Int): Int {
-	if (num < 0 || exp < 0) {
-		return -1
-	} else if (exp > 100) {
-		return -2
+def dot(a: Int, b: Int): Int {
+	if (a > 0 && b > 0) {
+		return a*a + b*b
 	} else {
-		var res: Int = num
-		while (count > 1) {
-			res = res * num
-			count = count - 1
-		}
-		return res
+		return 0
 	}
 }
-
-var exponent: Int = 5
