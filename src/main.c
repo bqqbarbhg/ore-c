@@ -60,7 +60,7 @@ void dumpHtmlPost(AstDumper *ad, Ast *ast)
 	d->level--;
 }
 
-int dumpHtmlPrint(AstDumper *ad, const char *str)
+void dumpHtmlPrint(AstDumper *ad, const char *str)
 {
 	HtmlDumper *d = (HtmlDumper*)ad;
 	for (const char *s = str; *s; s++) {
@@ -72,7 +72,6 @@ int dumpHtmlPrint(AstDumper *ad, const char *str)
 		default: putc(c, d->file); break;
 		}
 	}
-	return 1;
 }
 
 void beginHtmlDump(HtmlDumper *dumper, const char *file)

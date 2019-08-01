@@ -692,7 +692,7 @@ void dumpFunc(Module *module, Func *func)
 				const char *source;
 				size_t length;
 				if (getSourceLine(inst.ast->span.file, data.line, &source, &length)) {
-					while (length > 0 && *source == ' ' || *source == '\t') {
+					while (length > 0 && (*source == ' ' || *source == '\t')) {
 						source++;
 						length--;
 					}
