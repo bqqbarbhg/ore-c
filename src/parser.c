@@ -254,13 +254,13 @@ static Ast *parseAndOr(Parser *p)
 	Ast *left = parseCompare(p);
 	if (!left) return NULL;
 	while (accept(p, T_And) || accept(p, T_Or)) {
-		AstBinop *binop = pushAst(p, AstBinop);
-		binop->op = p->prev;
-		binop->left = left;
-		binop->right = parseCompare(p);
-		if (!binop->right) return NULL;
-		binop->ast.span = mergeSpan(binop->left->span, binop->right->span);
-		left = &binop->ast;
+		AstLogic *logic = pushAst(p, AstLogic);
+		logic->op = p->prev;
+		logic->left = left;
+		logic->right = parseCompare(p);
+		if (!logic->right) return NULL;
+		logic->ast.span = mergeSpan(logic->left->span, logic->right->span);
+		left = &logic->ast;
 	}
 
 	return left;
@@ -271,13 +271,12 @@ static Ast *parseAssign(Parser *p)
 	Ast *left = parseAndOr(p);
 	if (!left) return NULL;
 	if (accept(p, T_Assign)) {
-		AstBinop *binop = pushAst(p, AstBinop);
-		binop->op = p->prev;
-		binop->left = left;
-		binop->right = parseAssign(p);
-		if (!binop->right) return NULL;
-		binop->ast.span = mergeSpan(binop->left->span, binop->right->span);
-		left = &binop->ast;
+		AstAssign *assign = pushAst(p, AstAssign);
+		assign->left = left;
+		assign->right = parseAssign(p);
+		if (!assign->right) return NULL;
+		assign->ast.span = mergeSpan(assign->left->span, assign->right->span);
+		left = &assign->ast;
 	}
 	return left;
 }
@@ -625,6 +624,8 @@ const char *getAstTypeName(AstType type)
 	case A_AstNumber: return "Number";
 	case A_AstUnop: return "Unop";
 	case A_AstBinop: return "Binop";
+	case A_AstLogic: return "Logic";
+	case A_AstAssign: return "Assign";
 	case A_AstCall: return "Call";
 	case A_AstParen: return "Paren";
 	default:
@@ -767,6 +768,22 @@ static void dumpAstRecursive(AstDumper *d, Ast *ast, int indent)
 		dump(d, getCString(binop->op.symbol));
 		dump(d, " ");
 		dumpAstRecursive(d, binop->right, indent);
+	} break;
+
+	case A_AstLogic: {
+		AstLogic *logic = (AstLogic*)ast;
+		dumpAstRecursive(d, logic->left, indent);
+		dump(d, " ");
+		dump(d, getCString(logic->op.symbol));
+		dump(d, " ");
+		dumpAstRecursive(d, logic->right, indent);
+	} break;
+
+	case A_AstAssign: {
+		AstAssign *assign = (AstAssign*)ast;
+		dumpAstRecursive(d, assign->left, indent);
+		dump(d, " = ");
+		dumpAstRecursive(d, assign->right, indent);
 	} break;
 
 	case A_AstCall: {

@@ -18,6 +18,8 @@ typedef enum {
 	A_AstNumber,
 	A_AstUnop,
 	A_AstBinop,
+	A_AstLogic,
+	A_AstAssign,
 	A_AstCall,
 	A_AstParen,
 } AstType;
@@ -110,6 +112,17 @@ typedef struct AstBinop_s {
 	Token op;
 	Ast *left, *right;
 } AstBinop;
+
+typedef struct AstLogic_s {
+	Ast ast;
+	Token op;
+	Ast *left, *right;
+} AstLogic;
+
+typedef struct AstAssign_s {
+	Ast ast;
+	Ast *left, *right;
+} AstAssign;
 
 typedef struct AstCall_s {
 	Ast ast;

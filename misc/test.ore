@@ -1,5 +1,9 @@
 
-var exponent: Int = 5
+def main(): Int {
+	var result = pow(2, exponent)
+	printInt(result)
+	return 0
+}
 
 def pow(num: Int, exp: Int): Int {
 	if (num < 0 || exp < 0) {
@@ -16,8 +20,4 @@ def pow(num: Int, exp: Int): Int {
 	}
 }
 
-def main(): Int {
-	var result = pow(2, exponent)
-	printInt(result)
-	return 0
-}
+var exponent: Int = 5

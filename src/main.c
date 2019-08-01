@@ -1,8 +1,9 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "base.h"
+#include "error.h"
 #include "lexer.h"
 #include "parser.h"
-#include "error.h"
+#include "compiler.h"
 
 #include <stdio.h>
 
@@ -19,16 +20,16 @@ char *readFile(const char *filename, size_t *outSize)
 	return data;
 }
 
+void printStdio(AstDumper *d, const char *str)
+{
+	printf("%s", str);
+}
+
 typedef struct {
 	AstDumper dumper;
 	FILE *file;
 	uint32_t level;
 } HtmlDumper;
-
-void printStdio(AstDumper *d, const char *str)
-{
-	printf("%s", str);
-}
 
 const char *htmlHoverColors[] = {
 	"#FDDFDF",
@@ -162,6 +163,22 @@ int main(int argc, char **argv)
 			endHtmlDump(&hd);
 		}
 
+		Compiler *compiler = createCompiler(&errors);
+		addCompileAst(compiler, ast);
+
+		Module module;
+		if (compile(compiler, &module)) {
+			printf("Compiled succesfully!\n");
+		} else {
+			for (uint32_t i = 0; i < errors.errors.size; i++) {
+				Error *error = &errors.errors.data[i];
+				SourceData sd = getSourceData(error->span);
+				fprintf(stderr, "%s:%u:%u: Error: %s\n",
+					sd.filename, sd.line, sd.col, error->message);
+			}
+		}
+
+		freeCompiler(compiler);
 		freeAst(ast);
 	} else {
 		for (uint32_t i = 0; i < errors.errors.size; i++) {

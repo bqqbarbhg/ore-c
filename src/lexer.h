@@ -24,6 +24,8 @@ typedef enum {
 	T_Assign,
 	T_Equal,
 	T_NotEqual,
+	T_LessEq,
+	T_GreaterEq,
 
 	T_Or, T_And,
 

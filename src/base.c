@@ -94,6 +94,18 @@ static uint32_t lowbias32(uint32_t x)
     return x;
 }
 
+void symbolMapInitLocal(SymbolMap *map, uint64_t *local, size_t localSize)
+{
+	size_t count = (size_t)(localSize / sizeof(uint64_t) * 0.8);
+	rhmap_init_inline(&map->map);
+	rhmap_rehash(&map->map, count, localSize, local);
+}
+
+void symbolMapFree(SymbolMap *map)
+{
+	rhmap_reset_inline(&map->map);
+}
+
 uint32_t symbolMapInsert(SymbolMap *map, Symbol symbol, uint32_t value)
 {
 	if (map->map.size >= map->map.capacity) {

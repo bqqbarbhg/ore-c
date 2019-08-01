@@ -88,6 +88,8 @@ Lexer *createLexer(const LexerInput *input)
 		addToken(lr, T_Assign , "=");
 		addToken(lr, T_Equal , "==");
 		addToken(lr, T_NotEqual , "!=");
+		addToken(lr, T_LessEq, "<=");
+		addToken(lr, T_GreaterEq, ">=");
 
 		addToken(lr, T_Or, "||");
 		addToken(lr, T_And, "&&");
@@ -241,8 +243,14 @@ Token scan(Lexer *l)
 	case '}': type = T_BlockClose; break;
 	case '[': type = T_IndexOpen; break;
 	case ']': type = T_IndexClose; break;
-	case '<': type = T_AngleOpen; break;
-	case '>': type = T_AngleClose; break;
+	case '<':
+		if (next == '=') type = T_LessEq;
+		else type = T_AngleOpen;
+		break;
+	case '>':
+		if (next == '=') type = T_GreaterEq;
+		else type = T_AngleClose;
+		break;
 
 	case ':': type = T_Colon; break;
 	case ',': type = T_Comma; break;

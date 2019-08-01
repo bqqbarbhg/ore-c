@@ -37,6 +37,9 @@ typedef struct {
 	rhmap map;
 } SymbolMap;
 
+void symbolMapInitLocal(SymbolMap *map, uint64_t *local, size_t localSize);
+void symbolMapFree(SymbolMap *map);
+
 uint32_t symbolMapInsert(SymbolMap *map, Symbol symbol, uint32_t value);
 uint32_t symbolMapInsertArrSize(SymbolMap *map, void **arr, size_t elemSize, Symbol symbol);
 uint32_t symbolMapFind(SymbolMap *map, Symbol symbol);
