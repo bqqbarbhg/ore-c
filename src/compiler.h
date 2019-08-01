@@ -17,9 +17,7 @@ typedef enum {
 	O_Arith,   // dst = a <ext> b  (+ - * /)
 	O_Unary,   // dst = <ext> a    (-)
 	O_Compare, // dst = a <ext> b  (== != < <= > >=)
-	O_Arg,     // args[ext] = a
 	O_Call,    // dst = a(args)
-	O_Return,  // result = a
 	O_Branch,  // if (a)
 } Op;
 
@@ -54,6 +52,8 @@ typedef enum {
 	VK_GlobalRef,
 	VK_Const,
 	VK_Branch,
+	VK_Argument,
+	VK_Return,
 } ValueKind;
 
 typedef struct {
@@ -88,7 +88,9 @@ typedef struct {
 typedef buf_type(Inst) Inst_buf;
 
 typedef struct {
-	char label[32];
+	char label[16];
+
+	uint8_t unreferenced;
 
 	Ast *branchAst;
 	uint32_t blockTrue, blockFalse;

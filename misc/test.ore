@@ -1,8 +1,22 @@
 
-def what(a: Int, b: Int, c: Int): Int {
-	if (a && !(b || c)) {
-		return a * 2
+def min(a: Int, b: Int): Int {
+	if (a < b) {
+		return a
 	} else {
-		return b * 3
+		return b
 	}
+}
+
+def max(a: Int, b: Int): Int {
+	if (a > b) {
+		return a
+	} else {
+		return b
+	}
+}
+
+def diff(a: Int, b: Int): Int {
+	var mn = min(a, b)
+	var mx = max(a, b)
+	return mx - mn
 }
