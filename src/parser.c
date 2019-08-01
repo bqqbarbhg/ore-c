@@ -146,6 +146,13 @@ static Ast *parseAtom(Parser *p)
 		if (!unop->expr) return NULL;
 		unop->ast.span = mergeSpan(unop->op.span, unop->expr->span);
 		return &unop->ast;
+	} else if (accept(p, T_Not)) {
+		Token notToken = p->prev;
+		AstNot *not = pushAst(p, AstNot);
+		not->expr = parseAtom(p);
+		if (!not->expr) return NULL;
+		not->ast.span = mergeSpan(notToken.span, not->expr->span);
+		return &not->ast;
 	} else {
 		errorAtToken(p, "Expected an expression");
 		return NULL;
@@ -624,6 +631,7 @@ const char *getAstTypeName(AstType type)
 	case A_AstNumber: return "Number";
 	case A_AstUnop: return "Unop";
 	case A_AstBinop: return "Binop";
+	case A_AstNot: return "Not";
 	case A_AstLogic: return "Logic";
 	case A_AstAssign: return "Assign";
 	case A_AstCall: return "Call";
@@ -768,6 +776,12 @@ static void dumpAstRecursive(AstDumper *d, Ast *ast, int indent)
 		dump(d, getCString(binop->op.symbol));
 		dump(d, " ");
 		dumpAstRecursive(d, binop->right, indent);
+	} break;
+
+	case A_AstNot: {
+		AstNot *not = (AstNot*)ast;
+		dump(d, "!");
+		dumpAstRecursive(d, not->expr, indent);
 	} break;
 
 	case A_AstLogic: {

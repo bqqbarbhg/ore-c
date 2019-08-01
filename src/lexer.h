@@ -20,14 +20,13 @@ typedef enum {
 
 	T_Add, T_Sub, T_Mul, T_Div, T_Mod,
 
-	T_Not,
 	T_Assign,
 	T_Equal,
 	T_NotEqual,
 	T_LessEq,
 	T_GreaterEq,
 
-	T_Or, T_And,
+	T_Not, T_Or, T_And,
 
 	KW_Def,
 	KW_If,

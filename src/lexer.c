@@ -86,13 +86,13 @@ Lexer *createLexer(const LexerInput *input)
 		addToken(lr, T_Div, "/");
 		addToken(lr, T_Mod, "%");
 
-		addToken(lr, T_Not, "!");
 		addToken(lr, T_Assign , "=");
 		addToken(lr, T_Equal , "==");
 		addToken(lr, T_NotEqual , "!=");
 		addToken(lr, T_LessEq, "<=");
 		addToken(lr, T_GreaterEq, ">=");
 
+		addToken(lr, T_Not, "!");
 		addToken(lr, T_Or, "||");
 		addToken(lr, T_And, "&&");
 

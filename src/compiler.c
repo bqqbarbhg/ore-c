@@ -19,9 +19,12 @@ struct Compiler_s {
 
 	Module module;
 
-	uint32_t orCounter, andCounter;
+	uint32_t branchCounter;
+	uint32_t andCounter, orCounter;
 	uint32_t ifCounter, whileCounter;
 	uint32_t returnCounter;
+
+	uint32_t branchTrue, branchFalse;
 
 	uint32_t blockIndex;
 	Block *block;
@@ -85,15 +88,35 @@ static uint32_t pushBlock(Compiler *c, const char *fmt, ...)
 	va_start(args, fmt);
 	vsnprintf(block->label, sizeof(block->label), fmt, args);
 	va_end(args);
-
 	c->block = &c->func->blocks.data[c->blockIndex];
 	return c->func->blocks.size - 1;
+}
+
+static void renameBlock(Compiler *c, uint32_t index, const char *fmt, ...)
+{
+	Block *block = &c->func->blocks.data[index];
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(block->label, sizeof(block->label), fmt, args);
+	va_end(args);
 }
 
 static void switchBlock(Compiler *c, uint32_t index)
 {
 	c->blockIndex = index;
 	c->block = &c->func->blocks.data[index];
+}
+
+static void threadBlock(Compiler *c, uint32_t from, uint32_t to)
+{
+	assert(c->func->blocks.data[from].blockTrue == 0);
+	c->func->blocks.data[from].blockTrue = to;
+}
+
+static void disableBlock(Compiler *c)
+{
+	c->blockIndex = ~0u;
+	c->block = NULL;
 }
 
 static Value pushTemp(Compiler *c, TypeRef type)
@@ -274,46 +297,84 @@ static Value compileExpr(Compiler *c, Ast *ast)
 		return dst;
 	} break;
 
+	case A_AstNot: {
+		TypeRef boolType = { 2 };
+
+		AstNot *not = (AstNot*)ast;
+		Value expr = compileExpr(c, not->expr);
+
+		uint32_t branchTrue, branchFalse;
+		if (expr.ref.kind != VK_Branch) {
+			pushInstA(c, not->expr, O_Branch, expr.type, expr.ref);
+			uint32_t index = ++c->branchCounter;
+			branchTrue = pushBlock(c, "branch%u_true", index);
+			branchFalse = pushBlock(c, "branch%u_false", index);
+			c->block->blockTrue = branchTrue;
+			c->block->blockFalse = branchFalse;
+		} else {
+			branchTrue = c->branchTrue;
+			branchFalse = c->branchFalse;
+		}
+
+		c->branchTrue = branchFalse;
+		c->branchFalse = branchTrue;
+		return (Value) { boolType, VK_Branch };
+	} break;
+
 	case A_AstLogic: {
+		TypeRef boolType = { 2 };
+
 		AstLogic *logic = (AstLogic*)ast;
 		Value lhs = compileExpr(c, logic->left);
-		pushInstA(c, logic->left, O_Branch, lhs.type, lhs.ref);
+
+		uint32_t branchTrue, branchFalse;
+		if (lhs.ref.kind != VK_Branch) {
+			pushInstA(c, logic->left, O_Branch, lhs.type, lhs.ref);
+			uint32_t index = ++c->branchCounter;
+			branchTrue = pushBlock(c, "branch%u_true", index);
+			branchFalse = pushBlock(c, "branch%u_false", index);
+			c->block->blockTrue = branchTrue;
+			c->block->blockFalse = branchFalse;
+		} else {
+			branchTrue = c->branchTrue;
+			branchFalse = c->branchFalse;
+		}
 
 		if (logic->op.type == T_And) {
-			uint32_t index = ++c->andCounter;
-			uint32_t trueBlock = pushBlock(c, "and%u_true", index);
-			uint32_t falseBlock = pushBlock(c, "and%u_false", index);
-			c->block->blockTrue = trueBlock;
-			c->block->blockFalse = falseBlock;
-
-			switchBlock(c, trueBlock);
-
+			switchBlock(c, branchTrue);
 			Value rhs = compileExpr(c, logic->right);
-			pushInstA(c, logic->right, O_Branch, rhs.type, rhs.ref);
-			c->block->blockTrue = trueBlock;
-			c->block->blockFalse = falseBlock;
+			uint32_t blockTrue = pushBlock(c, "and%u_true", ++c->andCounter);
+			if (rhs.ref.kind == VK_Branch) {
+				threadBlock(c, c->branchTrue, blockTrue);
+				threadBlock(c, c->branchFalse, branchFalse);
+			} else {
+				pushInstA(c, logic->right, O_Branch, rhs.type, rhs.ref);
+				c->block->blockTrue = blockTrue;
+				c->block->blockFalse = branchFalse;
+			}
+			branchTrue = blockTrue;
 		} else if (logic->op.type == T_Or) {
-			uint32_t index = ++c->orCounter;
-			uint32_t trueBlock = pushBlock(c, "or%u_true", index);
-			uint32_t falseBlock = pushBlock(c, "or%u_false", index);
-			c->block->blockTrue = trueBlock;
-			c->block->blockFalse = falseBlock;
-
-			switchBlock(c, falseBlock);
-
+			switchBlock(c, branchFalse);
 			Value rhs = compileExpr(c, logic->right);
-			pushInstA(c, logic->right, O_Branch, rhs.type, rhs.ref);
-			c->block->blockTrue = trueBlock;
-			c->block->blockFalse = falseBlock;
-
-			switchBlock(c, trueBlock);
+			uint32_t blockFalse = pushBlock(c, "or%u_false", ++c->orCounter);
+			if (rhs.ref.kind == VK_Branch) {
+				threadBlock(c, c->branchTrue, branchTrue);
+				threadBlock(c, c->branchFalse, blockFalse);
+			} else {
+				pushInstA(c, logic->right, O_Branch, rhs.type, rhs.ref);
+				c->block->blockTrue = branchTrue;
+				c->block->blockFalse = blockFalse;
+			}
+			branchFalse = blockFalse;
 		} else {
 			errorFmt(c, logic->op.span, "Internal: Invalid logic operator");
 			return ErrorValue;
 		}
 
-		TypeRef boolType = { 2 };
-		return (Value) { boolType, VK_Block, c->blockIndex };
+		c->branchTrue = branchTrue;
+		c->branchFalse = branchFalse;
+		disableBlock(c);
+		return (Value) { boolType, VK_Branch };
 	} break;
 
 	case A_AstCall: {
@@ -384,23 +445,33 @@ static void compileStatement(Compiler *c, Ast *ast)
 		uint32_t ifIndex = ++c->ifCounter;
 
 		uint32_t endBlock = pushBlock(c, "if%u_end", ifIndex);
-
 		for (uint32_t i = 0; i < if_->numBranches; i++) {
 			IfBranch branch = if_->branches[i];
-			uint32_t bodyBlock = pushBlock(c, "if%u_body%u", ifIndex, i + 1);
-			uint32_t elseBlock = endBlock;
-			if (i + 1 < if_->numBranches || if_->elseBranch) {
-				elseBlock = pushBlock(c, "if%u_else%u", ifIndex, i + 1);
-			}
 
 			Value cond = compileExpr(c, branch.cond);
 			// TODO: Convert to bool
 
-			pushInstA(c, branch.cond, O_Branch, cond.type, cond.ref);
-
-			c->block->branchAst = branch.cond;
-			c->block->blockTrue = bodyBlock;
-			c->block->blockFalse = elseBlock;
+			uint32_t bodyBlock, elseBlock;
+			if (cond.ref.kind == VK_Branch) {
+				bodyBlock = c->branchTrue;
+				renameBlock(c, bodyBlock, "if%u_body%u", ifIndex, i + 1);
+				if (i + 1 < if_->numBranches || if_->elseBranch) {
+					elseBlock = c->branchFalse;
+					renameBlock(c, elseBlock, "if%u_else%u", ifIndex, i + 1);
+				} else {
+					threadBlock(c, elseBlock, endBlock);
+				}
+			} else {
+				pushInstA(c, branch.cond, O_Branch, cond.type, cond.ref);
+				bodyBlock = pushBlock(c, "if%u_body%u", ifIndex, i + 1);
+				elseBlock = endBlock;
+				if (i + 1 < if_->numBranches || if_->elseBranch) {
+					elseBlock = pushBlock(c, "if%u_else%u", ifIndex, i + 1);
+				}
+				c->block->branchAst = branch.cond;
+				c->block->blockTrue = bodyBlock;
+				c->block->blockFalse = elseBlock;
+			}
 
 			switchBlock(c, bodyBlock);
 
@@ -420,18 +491,26 @@ static void compileStatement(Compiler *c, Ast *ast)
 		uint32_t whileIndex = ++c->whileCounter;
 
 		uint32_t condBlock = pushBlock(c, "while%u_cond", whileIndex);
-		uint32_t bodyBlock = pushBlock(c, "while%u_body", whileIndex);
-		uint32_t endBlock = pushBlock(c, "while%u_end", whileIndex);
 
 		c->block->blockTrue = condBlock;
 		switchBlock(c, condBlock);
 
 		Value cond = compileExpr(c, while_->cond);
 		// TODO: Convert to bool
-		pushInstA(c, while_->cond, O_Branch, cond.type, cond.ref);
-		c->block->branchAst = while_->cond;
-		c->block->blockTrue = bodyBlock;
-		c->block->blockFalse = endBlock;
+		uint32_t bodyBlock, endBlock;
+		if (cond.ref.kind == VK_Branch) {
+			bodyBlock = c->branchTrue;
+			endBlock = c->branchFalse;
+			renameBlock(c, bodyBlock, "while%u_body", whileIndex);
+			renameBlock(c, endBlock, "while%u_end", whileIndex);
+		} else {
+			bodyBlock = pushBlock(c, "while%u_body", whileIndex);
+			endBlock = pushBlock(c, "while%u_end", whileIndex);
+			pushInstA(c, while_->cond, O_Branch, cond.type, cond.ref);
+			c->block->branchAst = while_->cond;
+			c->block->blockTrue = bodyBlock;
+			c->block->blockFalse = endBlock;
+		}
 
 		switchBlock(c, bodyBlock);
 
@@ -484,6 +563,7 @@ static void compileFunc(Compiler *c, Func *func)
 {
 	c->func = func;
 
+	c->branchCounter = 0;
 	c->andCounter = 0;
 	c->orCounter = 0;
 	c->ifCounter = 0;
@@ -557,7 +637,7 @@ static void dumpValueRef(Module *module, Func *func, ValueRef ref)
 	case VK_TempRef: printf("*t%u", ref.index); break;
 	case VK_GlobalRef: printf("*%s", getCString(module->globals.data[ref.index].name.symbol)); break;
 	case VK_Const: printf("const:%u", ref.index); break;
-	case VK_Block: printf("%s", func->blocks.data[ref.index].label); break;
+	case VK_Branch: printf("(branch)"); break;
 	default: assert(0 && "Unhandled ref kind");
 	}
 }

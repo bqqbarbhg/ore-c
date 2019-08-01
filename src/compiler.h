@@ -53,7 +53,7 @@ typedef enum {
 	VK_TempRef,
 	VK_GlobalRef,
 	VK_Const,
-	VK_Block,
+	VK_Branch,
 } ValueKind;
 
 typedef struct {
