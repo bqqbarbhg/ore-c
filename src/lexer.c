@@ -97,6 +97,7 @@ Lexer *createLexer(const LexerInput *input)
 		addKeyword(lr, KW_Else, "else");
 		addKeyword(lr, KW_While, "while");
 		addKeyword(lr, KW_Return, "return");
+		addKeyword(lr, KW_Var, "var");
 	}
 
 	return l;

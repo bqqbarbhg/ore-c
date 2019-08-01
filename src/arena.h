@@ -17,6 +17,8 @@ typedef struct arena_s {
 void arena_init(arena *arena);
 void arena_reset(arena *arena);
 
+void arena_free_data(void *data);
+
 uint32_t arena_new_page(arena *arena, size_t size);
 
 ARENA_INLINE void *arena_push_size_zero(arena *arena, size_t size)
@@ -78,12 +80,7 @@ void arena_init(arena *arena)
 
 void arena_reset(arena *arena)
 {
-	void *data = arena->data;
-	while (data) {
-		void *to_free = data;
-		data = *(void**)data;
-		free(to_free);
-	}
+	arena_free_data(arena->data);
 	arena->data = 0;
 	arena->pos = arena->capacity = 0;
 }
@@ -99,6 +96,15 @@ uint32_t arena_new_page(arena *arena, size_t size)
 	arena->capacity = capacity;
 	*(void**)arena->data = old_page;
 	return 8;
+}
+
+void arena_free_data(void *data)
+{
+	while (data) {
+		void *to_free = data;
+		data = *(void**)data;
+		free(to_free);
+	}
 }
 
 #endif

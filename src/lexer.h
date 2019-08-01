@@ -32,6 +32,7 @@ typedef enum {
 	KW_Else,
 	KW_While,
 	KW_Return,
+	KW_Var,
 
 	TokenType_Amount,
 
