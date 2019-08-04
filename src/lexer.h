@@ -17,6 +17,7 @@ typedef enum {
 
 	T_Colon,
 	T_Comma,
+	T_Dot,
 
 	T_Add, T_Sub, T_Mul, T_Div, T_Mod,
 
@@ -34,6 +35,7 @@ typedef enum {
 	KW_While,
 	KW_Return,
 	KW_Var,
+	KW_Struct,
 
 	TokenType_Amount,
 

@@ -104,15 +104,31 @@ static Ast *parseStatement(Parser *p);
 
 static Ast *parseType(Parser *p)
 {
+	Ast *type = NULL;
 	if (accept(p, T_Identifier)) {
 		AstIdent *ident = pushAst(p, AstIdent);
 		ident->name = p->prev;
 		ident->ast.span = p->prev.span;
-		return &ident->ast;
+		type = &ident->ast;
 	} else {
 		errorAtToken(p, "Expected a type");
 		return NULL;
 	}
+
+	while (!p->failed) {
+		if (accept(p, T_Mul)) {
+			Token mul = p->prev;
+			AstTypePtr *typePtr = pushAst(p, AstTypePtr);
+			typePtr->type = type;
+			typePtr->ast.span = mergeSpan(type->span, mul.span);
+			type = &typePtr->ast;
+			continue;
+		} else {
+			return type;
+		}
+	}
+
+	return NULL;
 }
 
 static Ast *parseAtom(Parser *p)
@@ -196,6 +212,16 @@ static Ast *parseCall(Parser *p)
 		} else if (accept(p, T_BlockOpen)) {
 			errorAtToken(p, "Indexing is unimplemented");
 			return NULL;
+		} else if (accept(p, T_Dot)) {
+			AstMember *member = pushAst(p, AstMember);
+			member->expr = left;
+			member->name = p->token;
+			if (!accept(p, T_Mul) && !accept(p, T_Identifier)) {
+				errorAtToken(p, "Expected field name or '*'");
+				return NULL;
+			}
+			member->ast.span = mergeSpan(left->span, member->name.span);
+			left = &member->ast;
 		} else {
 			return left;
 		}
@@ -563,11 +589,67 @@ static Ast *parseToplevel(Parser *p)
 		return &ast->ast;
 	} else if (accept(p, KW_Var)) {
 		AstVar *var = finishVar(p, p->prev);
+		if (!var) return NULL;
 		if (!var->type) {
 			errorAt(p, var->name.span, "Top-level variables must have types");
 			return NULL;
 		}
 		return &var->ast;
+	} else if (accept(p, KW_Struct)) {
+		Token structTok = p->prev;
+		Token name = p->token;
+		if (!accept(p, T_Identifier)) {
+			errorAtPrev(p, "Expected struct name");
+			return NULL;
+		}
+		if (!accept(p, T_BlockOpen)) {
+			errorAtToken(p, "Expected '{' for struct members");
+			return NULL;
+		}
+
+		DeclAst localDecls[32];
+		buf_type(DeclAst) decls = buf_local(localDecls);
+
+		int hasNewline = 1;
+		while (!accept(p, T_BlockClose)) {
+			if (p->failed) break;
+			if (accept(p, T_Newline)) {
+				hasNewline = 1;
+				continue;
+			} else if (!hasNewline) {
+				errorAtToken(p, "Missing newline between fields");
+				break;
+			}
+			hasNewline = 0;
+			DeclAst *decl = buf_push_uninit(&decls);
+			decl->name = p->token;
+			if (!accept(p, T_Identifier)) {
+				errorAtPrev(p, "Expected field name");
+				break;
+			}
+			if (!accept(p, T_Colon)) {
+				errorAtPrev(p, "Expected ':' before field type");
+				break;
+			}
+			decl->type = parseType(p);
+			if (!decl->type) break;
+		}
+		Token close = p->prev;
+
+		if (!accept(p, T_Newline)) {
+			errorAtToken(p, "Expected newline after struct declaration");
+		}
+		if (p->failed) {
+			buf_reset(&decls);
+			return NULL;
+		}
+
+		AstStruct *ast = pushAstExtra(p, AstStruct, sizeof(DeclAst) * decls.size);
+		ast->name = name;
+		ast->numFields = decls.size;
+		memcpy(ast->fields, decls.data, sizeof(DeclAst) * decls.size);
+		ast->ast.span = mergeSpan(structTok.span, close.span);
+		return &ast->ast;
 	} else {
 		errorAtToken(p, "Invalid top-level declaration");
 		return NULL;
@@ -621,6 +703,8 @@ const char *getAstTypeName(AstType type)
 	switch (type) {
 	case A_AstToplevel: return "Toplevel";
 	case A_AstDef: return "Def";
+	case A_AstStruct: return "Struct";
+	case A_AstTypePtr: return "TypePtr";
 	case A_AstBlock: return "Block";
 	case A_AstExpr: return "Expr";
 	case A_AstIf: return "If";
@@ -635,6 +719,7 @@ const char *getAstTypeName(AstType type)
 	case A_AstLogic: return "Logic";
 	case A_AstAssign: return "Assign";
 	case A_AstCall: return "Call";
+	case A_AstMember: return "Member";
 	case A_AstParen: return "Paren";
 	default:
 		assert(0 && "Unhandled AST type");
@@ -666,6 +751,7 @@ static void dumpAstRecursive(AstDumper *d, Ast *ast, int indent)
 		AstToplevel *block = (AstToplevel*)ast;
 		for (uint32_t i = 0; i < block->numToplevels; i++) {
 			if (block->toplevels[i]->type == A_AstDef) dump(d, "\n");
+			if (block->toplevels[i]->type == A_AstStruct) dump(d, "\n");
 			dumpIndent(d, indent);
 			dumpAstRecursive(d, block->toplevels[i], indent);
 			dump(d, "\n");
@@ -688,6 +774,29 @@ static void dumpAstRecursive(AstDumper *d, Ast *ast, int indent)
 		dumpAstRecursive(d, def->returnType, indent);
 		dump(d, " ");
 		dumpAstRecursive(d, &def->body->ast, indent);
+	} break;
+
+	case A_AstStruct: {
+		AstStruct *struct_ = (AstStruct*)ast;
+		dump(d, "struct ");
+		dump(d, getCString(struct_->name.symbol));
+		dump(d, " {\n");
+		for (uint32_t i = 0; i < struct_->numFields; i++) {
+			dumpIndent(d, indent + 1);
+			DeclAst decl = struct_->fields[i];
+			dump(d, getCString(decl.name.symbol));
+			dump(d, ": ");
+			dumpAstRecursive(d, decl.type, indent);
+			dump(d, "\n");
+		}
+		dumpIndent(d, indent);
+		dump(d, "}");
+	} break;
+
+	case A_AstTypePtr: {
+		AstTypePtr *typePtr = (AstTypePtr*)ast;
+		dumpAstRecursive(d, typePtr->type, indent);
+		dump(d, "*");
 	} break;
 
 	case A_AstBlock: {
@@ -809,6 +918,13 @@ static void dumpAstRecursive(AstDumper *d, Ast *ast, int indent)
 			dumpAstRecursive(d, call->args[i], indent);
 		}
 		dump(d, ")");
+	} break;
+
+	case A_AstMember: {
+		AstMember *member = (AstMember*)ast;
+		dumpAstRecursive(d, member->expr, indent);
+		dump(d, ".");
+		dump(d, getCString(member->name.symbol));
 	} break;
 
 	case A_AstParen: {

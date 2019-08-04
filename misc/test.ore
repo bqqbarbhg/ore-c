@@ -1,22 +1,17 @@
 
-def min(a: Int, b: Int): Int {
-	if (a < b) {
-		return a
-	} else {
-		return b
-	}
+struct Bounds {
+	min: Int
+	max: Int
 }
 
-def max(a: Int, b: Int): Int {
-	if (a > b) {
-		return a
-	} else {
-		return b
-	}
-}
+struct Result { bounds: Bounds }
 
-def diff(a: Int, b: Int): Int {
-	var mn = min(a, b)
-	var mx = max(a, b)
-	return mx - mn
+def getBounds(res: Result*, data: Int*, size: Int): Void {
+	var index = 0
+	while (index < size) {
+		var value = (data + index).*
+		if (value < res.bounds.min) res.bounds.min = value
+		if (value > res.bounds.max) res.bounds.max = value
+		index = index + 1
+	}
 }

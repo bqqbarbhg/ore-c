@@ -6,6 +6,9 @@ typedef enum {
 	A_AstToplevel,
 
 	A_AstDef,
+	A_AstStruct,
+
+	A_AstTypePtr,
 
 	A_AstBlock,
 	A_AstExpr,
@@ -22,6 +25,7 @@ typedef enum {
 	A_AstLogic,
 	A_AstAssign,
 	A_AstCall,
+	A_AstMember,
 	A_AstParen,
 } AstType;
 
@@ -43,6 +47,18 @@ typedef struct AstDef_s {
 	uint32_t numParams;
 	DeclAst params[];
 } AstDef;
+
+typedef struct AstStruct_s {
+	Ast ast;
+	Token name;
+	uint32_t numFields;
+	DeclAst fields[];
+} AstStruct;
+
+typedef struct AstTypePtr_s {
+	Ast ast;
+	Ast *type;
+} AstTypePtr;
 
 typedef struct AstToplevel_s {
 	Ast ast;
@@ -136,6 +152,12 @@ typedef struct AstCall_s {
 	uint32_t numArgs;
 	Ast *args[];
 } AstCall;
+
+typedef struct AstMember_s {
+	Ast ast;
+	Ast *expr;
+	Token name;
+} AstMember;
 
 typedef struct AstParen_s {
 	Ast ast;

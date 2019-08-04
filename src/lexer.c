@@ -79,6 +79,7 @@ Lexer *createLexer(const LexerInput *input)
 
 		addToken(lr, T_Colon, ":");
 		addToken(lr, T_Comma, ",");
+		addToken(lr, T_Dot, ",");
 
 		addToken(lr, T_Add, "+");
 		addToken(lr, T_Sub, "-");
@@ -102,6 +103,7 @@ Lexer *createLexer(const LexerInput *input)
 		addKeyword(lr, KW_While, "while");
 		addKeyword(lr, KW_Return, "return");
 		addKeyword(lr, KW_Var, "var");
+		addKeyword(lr, KW_Struct, "struct");
 	}
 
 	return l;
@@ -256,6 +258,7 @@ Token scan(Lexer *l)
 
 	case ':': type = T_Colon; break;
 	case ',': type = T_Comma; break;
+	case '.': type = T_Dot; break;
 
 	case '+': type = T_Add; break;
 	case '-': type = T_Sub; break;
