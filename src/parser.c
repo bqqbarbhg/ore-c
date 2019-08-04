@@ -594,6 +594,10 @@ static Ast *parseToplevel(Parser *p)
 			errorAt(p, var->name.span, "Top-level variables must have types");
 			return NULL;
 		}
+		if (!accept(p, T_Newline) && !accept(p, T_End)) {
+			errorAtToken(p, "Expected newline after global variable declaration");
+			return NULL;
+		}
 		return &var->ast;
 	} else if (accept(p, KW_Struct)) {
 		Token structTok = p->prev;
@@ -634,7 +638,6 @@ static Ast *parseToplevel(Parser *p)
 			decl->type = parseType(p);
 			if (!decl->type) break;
 		}
-		Token close = p->prev;
 
 		if (!accept(p, T_Newline)) {
 			errorAtToken(p, "Expected newline after struct declaration");
@@ -648,8 +651,26 @@ static Ast *parseToplevel(Parser *p)
 		ast->name = name;
 		ast->numFields = decls.size;
 		memcpy(ast->fields, decls.data, sizeof(DeclAst) * decls.size);
-		ast->ast.span = mergeSpan(structTok.span, close.span);
+		ast->ast.span = mergeSpan(structTok.span, name.span);
 		return &ast->ast;
+	} else if (accept(p, KW_Type)) {
+		AstTypeDef *typeDef = pushAst(p, AstTypeDef);
+		typeDef->name = p->token;
+		if (!accept(p, T_Identifier)) {
+			errorAtToken(p, "Expected type alias name");
+			return NULL;
+		}
+		if (accept(p, T_Assign)) {
+			typeDef->init = parseType(p);
+			if (!typeDef->init) return NULL;
+		} else {
+			// TODO: Opaque types?
+			typeDef->init = NULL;
+			errorAtToken(p, "Expected '=' before type alias expression");
+			return NULL;
+		}
+		typeDef->ast.span = mergeSpan(typeDef->name.span, typeDef->init->span);
+		return &typeDef->ast;
 	} else {
 		errorAtToken(p, "Invalid top-level declaration");
 		return NULL;
@@ -704,6 +725,7 @@ const char *getAstTypeName(AstType type)
 	case A_AstToplevel: return "Toplevel";
 	case A_AstDef: return "Def";
 	case A_AstStruct: return "Struct";
+	case A_AstTypeDef: return "TypeDef";
 	case A_AstTypePtr: return "TypePtr";
 	case A_AstBlock: return "Block";
 	case A_AstExpr: return "Expr";
@@ -791,6 +813,14 @@ static void dumpAstRecursive(AstDumper *d, Ast *ast, int indent)
 		}
 		dumpIndent(d, indent);
 		dump(d, "}");
+	} break;
+
+	case A_AstTypeDef: {
+		AstTypeDef *typeDef = (AstTypeDef*)ast;
+		dump(d, "type ");
+		dump(d, getCString(typeDef->name.symbol));
+		dump(d, " = ");
+		dumpAstRecursive(d, typeDef->init, indent);
 	} break;
 
 	case A_AstTypePtr: {

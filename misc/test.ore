@@ -1,5 +1,8 @@
 
+type ResultPtr = Result*
+
 struct Bounds {
+	result: ResultPtr
 	min: Int
 	max: Int
 }

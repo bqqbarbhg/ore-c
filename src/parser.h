@@ -7,6 +7,7 @@ typedef enum {
 
 	A_AstDef,
 	A_AstStruct,
+	A_AstTypeDef,
 
 	A_AstTypePtr,
 
@@ -54,6 +55,12 @@ typedef struct AstStruct_s {
 	uint32_t numFields;
 	DeclAst fields[];
 } AstStruct;
+
+typedef struct AstTypeDef_s {
+	Ast ast;
+	Token name;
+	Ast *init;
+} AstTypeDef;
 
 typedef struct AstTypePtr_s {
 	Ast ast;

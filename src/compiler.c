@@ -1,6 +1,9 @@
 #include "base.h"
 #include "compiler.h"
 
+#define RHMAP_INLINE static
+#include "rhmap.h"
+
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -32,6 +35,109 @@ struct Compiler_s {
 	int failed;
 };
 
+static uint32_t byteHash(const void *data, size_t size)
+{
+	// TODO: Do something faster than FNV-1a...
+	uint32_t hash = 2166136261u;
+	for (size_t i = 0; i < size; i++) {
+		hash = (hash ^ ((const char*)data)[i]) * 16777619u;
+	}
+	return hash;
+}
+
+size_t typeStructSize(Type *type)
+{
+	switch (type->kind) {
+	case TK_TypeInteger: return sizeof(TypeInteger);
+	case TK_TypePointer: return sizeof(TypePointer);
+	case TK_TypeStruct: {
+		TypeStruct *struct_ = (TypeStruct*)type;
+		return sizeof(TypeStruct) * sizeof(FieldType) * struct_->numFields;
+	}
+	default:
+		assert(0 && "Unhandled TypeKind");
+		return 0;
+	}
+}
+
+static uint32_t typeHash(Type *type)
+{
+	size_t size = typeStructSize(type) - sizeof(TypeInfo);
+	return byteHash((char*)type + sizeof(TypeInfo), size);
+}
+
+static int typeEqual(Type *a, Type *b) {
+	size_t sizeA = typeStructSize(a) - sizeof(TypeInfo);
+	size_t sizeB = typeStructSize(b) - sizeof(TypeInfo);
+	if (sizeA != sizeB) return 0;
+	char *baseA = (char*)a + sizeof(TypeInfo);
+	char *baseB = (char*)b + sizeof(TypeInfo);
+	return !memcmp(baseA, baseB, sizeA);
+}
+
+static void typeMapGrow(Module *m)
+{
+	uint32_t minSize = m->numTypes;
+	if (minSize < 32) minSize = 32;
+	size_t count, allocSize;
+	rhmap_grow(&m->typeMap, &count, &allocSize, minSize, 0.8);
+	void *data = malloc(allocSize + sizeof(Type*) * count);
+	Type **types = (Type**)((char*)data + allocSize);
+	memcpy(types, m->types, sizeof(Type*) * m->numTypes);
+	memset(types + m->numTypes, 0, (sizeof(Type*)) * (count - m->numTypes));
+	m->types = types;
+	void *oldData = rhmap_rehash(&m->typeMap, count, allocSize, data);
+	free(oldData);
+}
+
+static TypeRef internType(Module *m, Type *type)
+{
+	if (m->numTypes >= m->typeMap.capacity) {
+		typeMapGrow(m);
+	}
+
+	uint32_t hash = typeHash(type);
+	rhmap_iter iter = { &m->typeMap, hash };
+	uint32_t index;
+	while (rhmap_find_inline(&iter, &index)) {
+		if (typeEqual(m->types[index], type)) {
+			return (TypeRef){ index };
+		}
+	}
+
+	index = m->numTypes++;
+	rhmap_insert_inline(&iter, index);
+
+	size_t size = typeStructSize(type);
+	Type *copy = arena_push_size_copy(&m->typeArena, size, type);
+	m->types[index] = copy;
+
+	return (TypeRef){ index };
+}
+
+static void internReservedType(Module *m, Type *type, TypeRef ref)
+{
+	if (m->numTypes >= m->typeMap.capacity) {
+		typeMapGrow(m);
+	}
+
+	uint32_t hash = typeHash(type);
+	rhmap_iter iter = { &m->typeMap, hash };
+	rhmap_insert_inline(&iter, ref.index);
+
+	size_t size = typeStructSize(type);
+	m->types[ref.index] = type;
+}
+
+static TypeRef reserveType(Module *m)
+{
+	if (m->numTypes >= m->typeMap.capacity) {
+		typeMapGrow(m);
+	}
+
+	return (TypeRef) { m->numTypes++ };
+}
+
 static void errorFmt(Compiler *c, SourceSpan span, const char *fmt, ...)
 {
 	va_list args;
@@ -58,9 +164,25 @@ static void gatherToplevel(Compiler *c, Ast *ast)
 			Global *global = buf_push_zero(&c->module.globals);
 			global->name = func->name;
 			global->ast = &func->ast->ast;
-			global->type = (TypeRef) { 10 };
 			global->constant = 1;
 			symbolMapInsert(&c->globals, def->name.symbol, globalIndex);
+		} break;
+
+		case A_AstStruct: {
+			AstStruct *struct_ = (AstStruct*)ast;
+			uint32_t typeIndex = c->module.toplevelTypes.size;
+			ToplevelType *type = buf_push_zero(&c->module.toplevelTypes);
+			type->ast = ast;
+			type->type = reserveType(&c->module);
+			symbolMapInsert(&c->module.toplevelTypeNames, struct_->name.symbol, typeIndex);
+		} break;
+
+		case A_AstTypeDef: {
+			AstTypeDef *typeDef = (AstTypeDef*)ast;
+			uint32_t typeIndex = c->module.toplevelTypes.size;
+			ToplevelType *type = buf_push_zero(&c->module.toplevelTypes);
+			type->ast = ast;
+			symbolMapInsert(&c->module.toplevelTypeNames, typeDef->name.symbol, typeIndex);
 		} break;
 
 		case A_AstVar: {
@@ -69,7 +191,6 @@ static void gatherToplevel(Compiler *c, Ast *ast)
 			Global *global = buf_push_zero(&c->module.globals);
 			global->name = var->name;
 			global->ast = &var->ast;
-			global->type = (TypeRef) { 10 };
 			symbolMapInsert(&c->globals, var->name.symbol, globalIndex);
 		} break;
 
@@ -78,6 +199,131 @@ static void gatherToplevel(Compiler *c, Ast *ast)
 				getAstTypeName(ast->type));
 			break;
 		}
+	}
+}
+
+static TypeRef resolveToplevelTypeDecl(Compiler *c, ToplevelType *type);
+
+static TypeRef resolveToplevelType(Compiler *c, Ast *ast)
+{
+	switch (ast->type) {
+
+	case A_AstIdent: {
+		AstIdent *ident = (AstIdent*)ast;
+		uint32_t toplevelIndex = symbolMapFind(&c->module.toplevelTypeNames, ident->name.symbol);
+		if (toplevelIndex == ~0u) {
+			errorFmt(c, ident->name.span, "Type name '%s' not found",
+				getCString(ident->name.symbol));
+			return (TypeRef){ 0 };
+		}
+
+		ToplevelType *toplevel = &c->module.toplevelTypes.data[toplevelIndex];
+		return resolveToplevelTypeDecl(c, toplevel);
+	} break;
+
+	case A_AstTypePtr: {
+		AstTypePtr *ptr = (AstTypePtr*)ast;
+		TypePointer pointer = {
+			.base = {
+				.info = { .size = 8 },
+				.kind = TK_TypePointer
+			},
+			.type = resolveToplevelType(c, ptr->type),
+		};
+		if (!pointer.type.index) return (TypeRef){ 0 };
+		return internType(&c->module, &pointer.base);
+	} break;
+
+	default:
+		errorFmt(c, ast->span, "Internal: Unexpected type AST type '%s'",
+			getAstTypeName(ast->type));
+		return (TypeRef){ 0 };
+	}
+}
+
+static TypeRef resolveToplevelTypeDecl(Compiler *c, ToplevelType *type)
+{
+	if (type->type.index) {
+		if (type->type.index == ~0u) {
+			errorFmt(c, type->ast->span, "Recursive type declaration");
+			return (TypeRef){ 0 };
+		}
+		return type->type;
+	}
+	assert(type->ast != NULL);
+	type->type.index = ~0u;
+
+	switch (type->ast->type) {
+
+	case A_AstTypeDef: {
+		AstTypeDef *typeDef = (AstTypeDef*)type->ast;
+		type->type = resolveToplevelType(c, typeDef->init);
+		return type->type;
+	} break;
+
+	default:
+		assert(0 && "Unhandled toplevel type declaration AST type");
+		return (TypeRef){ 0 };
+	}
+}
+
+static void setupToplevelTypeDecl(Compiler *c, ToplevelType *toplevel)
+{
+	if (!toplevel->ast) return;
+	switch (toplevel->ast->type) {
+
+	case A_AstTypeDef:
+		resolveToplevelTypeDecl(c, toplevel);
+		break;
+
+	case A_AstStruct: {
+		AstStruct *ast = (AstStruct*)toplevel->ast;
+		TypeStruct *type = arena_push_size_zero(&c->module.typeArena, sizeof(TypeStruct) + sizeof(FieldType) * ast->numFields);
+		type->base.kind = TK_TypeStruct;
+		type->base.info.name = ast->name.symbol;
+		type->base.info.span = ast->name.span;
+		type->numFields = ast->numFields;
+		for (uint32_t i = 0; i < ast->numFields; i++) {
+			type->fields[i].name = ast->fields[i].name.symbol;
+			type->fields[i].span = ast->fields[i].name.span;
+			type->fields[i].type = resolveToplevelType(c, ast->fields[i].type);
+			if (c->failed) return;
+		}
+		internReservedType(&c->module, &type->base, toplevel->type);
+	} break;
+
+	default:
+		assert(0 && "Unhandled toplevel type declaration AST type");
+	}
+}
+
+static uint32_t resolveTypeSize(Compiler *c, Type *type)
+{
+	if (type->info.size == ~0u) {
+		errorFmt(c, type->info.span, "Type '%s' has recursive size",
+			getCString(type->info.name));
+		return 0;
+	}
+	if (type->info.size) return type->info.size;
+	type->info.size = ~0u;
+
+	switch (type->kind) {
+
+	case TK_TypeStruct: {
+		TypeStruct *struct_ = (TypeStruct*)type;
+		uint32_t size = 0;
+		for (uint32_t i = 0; i < struct_->numFields; i++) {
+			FieldType field = struct_->fields[i];
+			size += resolveTypeSize(c, c->module.types[field.type.index]);
+			if (c->failed) return 0;
+		}
+		struct_->base.info.size = size;
+		return size;
+	} break;
+
+	default:
+		assert(0 && "Type kind should have statically known size");
+		return 0;
 	}
 }
 
@@ -626,11 +872,36 @@ static void compileFunc(Compiler *c, Func *func)
 	}
 }
 
+static void pushInternalType(Compiler *c, const char *name, TypeKind kind, void *typeVoid)
+{
+	Symbol symbol = internZ(name);
+	Type *type = (Type*)typeVoid;
+	type->kind = kind;
+	type->info.name = symbol;
+
+	TypeRef ref = internType(&c->module, type);
+	symbolMapInsert(&c->module.toplevelTypeNames, symbol, c->module.toplevelTypes.size);
+	ToplevelType *topType = buf_push_uninit(&c->module.toplevelTypes);
+	topType->ast = NULL;
+	topType->type = ref;
+}
+
 Compiler *createCompiler(ErrorList *errors)
 {
 	Compiler *c = malloc(sizeof(Compiler));
 	memset(c, 0, sizeof(Compiler));
 	c->errorList = errors;
+
+	// Reserve NULL type
+	TypeRef nullType = reserveType(&c->module);
+	assert(nullType.index == 0);
+
+	pushInternalType(c, "Int", TK_TypeInteger, &(TypeInteger) {
+		.base = { .info = { .size = 4 } },
+		.hasSign = 1,
+		.bits = 32,
+	});
+
 	return c;
 }
 
@@ -648,6 +919,19 @@ int addCompileAst(Compiler *c, Ast *ast)
 
 int compile(Compiler *c, Module *result)
 {
+	if (c->failed) return 0;
+
+	for (uint32_t i = 0; i < c->module.toplevelTypes.size; i++) {
+		setupToplevelTypeDecl(c, &c->module.toplevelTypes.data[i]);
+	}
+
+	if (c->failed) return 0;
+
+	for (uint32_t i = 0; i < c->module.toplevelTypes.size; i++) {
+		ToplevelType *toplevel = &c->module.toplevelTypes.data[i];
+		resolveTypeSize(c, c->module.types[toplevel->type.index]);
+	}
+
 	if (c->failed) return 0;
 
 	for (uint32_t i = 0; i < c->module.funcs.size; i++) {

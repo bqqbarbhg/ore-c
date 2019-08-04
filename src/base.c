@@ -94,19 +94,19 @@ static uint32_t lowbias32(uint32_t x)
     return x;
 }
 
-void symbolMapInitLocal(SymbolMap *map, uint64_t *local, size_t localSize)
+void u32MapInitLocal(U32Map *map, uint64_t *local, size_t localSize)
 {
 	size_t count = (size_t)(localSize / sizeof(uint64_t) * 0.8);
 	rhmap_init_inline(&map->map);
 	rhmap_rehash(&map->map, count, localSize, local);
 }
 
-void symbolMapFree(SymbolMap *map)
+void u32MapFree(U32Map *map)
 {
 	rhmap_reset_inline(&map->map);
 }
 
-uint32_t symbolMapInsert(SymbolMap *map, Symbol symbol, uint32_t value)
+uint32_t u32MapInsert(U32Map *map, uint32_t key, uint32_t value)
 {
 	if (map->map.size >= map->map.capacity) {
 		size_t count, allocSize;
@@ -115,7 +115,7 @@ uint32_t symbolMapInsert(SymbolMap *map, Symbol symbol, uint32_t value)
 		void *prev = rhmap_rehash(&map->map, count, allocSize, newData);
 		free(prev);
 	}
-	rhmap_iter iter = { &map->map, lowbias32(symbol.index) };
+	rhmap_iter iter = { &map->map, lowbias32(key) };
 	uint32_t ref;
 	if (rhmap_find_inline(&iter, &ref)) {
 		return ref;
@@ -124,7 +124,7 @@ uint32_t symbolMapInsert(SymbolMap *map, Symbol symbol, uint32_t value)
 	return value;
 }
 
-uint32_t symbolMapInsertArrSize(SymbolMap *map, void **arr, size_t elemSize, Symbol symbol)
+uint32_t u32MapInsertArrSize(U32Map *map, void **arr, size_t elemSize, uint32_t key)
 {
 	if (map->map.size >= map->map.capacity) {
 		size_t count, allocSize;
@@ -137,7 +137,7 @@ uint32_t symbolMapInsertArrSize(SymbolMap *map, void **arr, size_t elemSize, Sym
 		void *prev = rhmap_rehash(&map->map, count, allocSize, newData);
 		free(prev);
 	}
-	rhmap_iter iter = { &map->map, lowbias32(symbol.index) };
+	rhmap_iter iter = { &map->map, lowbias32(key) };
 	uint32_t ref;
 	if (rhmap_find_inline(&iter, &ref)) {
 		return ref;
@@ -148,9 +148,9 @@ uint32_t symbolMapInsertArrSize(SymbolMap *map, void **arr, size_t elemSize, Sym
 	return index;
 }
 
-uint32_t symbolMapFind(SymbolMap *map, Symbol symbol)
+uint32_t u32MapFind(U32Map *map, uint32_t key)
 {
-	rhmap_iter iter = { &map->map, lowbias32(symbol.index) };
+	rhmap_iter iter = { &map->map, lowbias32(key) };
 	uint32_t ref;
 	if (rhmap_find_inline(&iter, &ref)) {
 		return ref;

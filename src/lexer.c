@@ -104,6 +104,7 @@ Lexer *createLexer(const LexerInput *input)
 		addKeyword(lr, KW_Return, "return");
 		addKeyword(lr, KW_Var, "var");
 		addKeyword(lr, KW_Struct, "struct");
+		addKeyword(lr, KW_Type, "type");
 	}
 
 	return l;

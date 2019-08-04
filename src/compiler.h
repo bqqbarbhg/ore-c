@@ -5,12 +5,56 @@
 #include "error.h"
 
 typedef struct {
-	int todo;
-} Type;
-
-typedef struct {
 	uint32_t index;
 } TypeRef;
+
+typedef enum {
+	TK_TypeInteger,
+	TK_TypePointer,
+	TK_TypeStruct,
+} TypeKind;
+
+// Parts of the type that are not compared
+typedef struct {
+	Symbol name;
+	SourceSpan span;
+	uint32_t size;
+} TypeInfo;
+
+typedef struct Type_s {
+	TypeInfo info;
+	TypeKind kind;
+} Type;
+
+typedef struct TypeInteger_s {
+	Type base;
+	unsigned hasSign : 1;
+	unsigned bits : 7;
+} TypeInteger;
+
+typedef struct TypePointer_s {
+	Type base;
+	TypeRef type;
+} TypePointer;
+
+typedef struct {
+	Symbol name;
+	SourceSpan span;
+	TypeRef type;
+} FieldType;
+
+typedef struct TypeStruct_s {
+	Type base;
+	uint32_t numFields;
+	FieldType fields[];
+} TypeStruct;
+
+typedef struct {
+	Ast *ast;
+	TypeRef type;
+} ToplevelType;
+
+typedef buf_type(ToplevelType) ToplevelType_buf;
 
 typedef enum {
 	O_Assign,  // dst = a
@@ -71,7 +115,7 @@ typedef struct {
 	ValueRef ref;
 } Value;
 
-#define ErrorValue ((Value) { VK_Error })
+#define ErrorValue ((Value) { 0, VK_Error })
 
 typedef buf_type(Value) Value_buf;
 
@@ -143,6 +187,14 @@ typedef buf_type(Global) Global_buf;
 typedef struct {
 	Global_buf globals;
 	Func_buf funcs;
+	ToplevelType_buf toplevelTypes;
+	SymbolMap toplevelTypeNames;
+
+	arena typeArena;
+	rhmap typeMap;
+	uint32_t numTypes;
+	Type **types;
+
 } Module;
 
 typedef struct Compiler_s Compiler;
